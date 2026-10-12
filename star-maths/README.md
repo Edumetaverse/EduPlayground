@@ -4,14 +4,20 @@ A maths game in the style of Star Fox. Answer gates fly through space towards yo
 
 ## Playing
 
-Serve the folder with any static web server and open `index.html`:
+### Online (GitHub Pages)
+
+Once GitHub Pages is switched on for the repo, the game is at https://edumetaverse.github.io/EduPlayground/
+
+### On your own computer
+
+Serve the folder with any static web server and open it in a browser:
 
 ```
 cd star-maths
 python3 -m http.server 8000
 ```
 
-Then visit http://localhost:8000. Opening `index.html` straight from disk also works in most browsers.
+Then visit http://localhost:8000. Use a web server rather than double clicking `index.html`, because browsers restrict some features for pages opened straight from disk.
 
 It needs a browser with WebGL 2 (current Chrome, Edge, Firefox or Safari).
 
