@@ -330,10 +330,16 @@
     function maybeSpawnHazard() {
         if (G.qIdx < 3 || G.hazards.length) return;
         if (Math.random() > 0.3 + 0.06 * G.level) return;
-        const tower = Scene.hasTerrain && Math.random() < 0.5;
-        if (tower) {
-            const side = Math.random() < 0.5 ? -1 : 1;
-            G.hazards.push({ type: 'tower', xb: side * rnd(14, 16.5), side, d: 100, mul: 1, done: false });
+        // a tower needs solid ground to stand on, not a river or lake
+        let tw = null;
+        if (Scene.hasTerrain && Math.random() < 0.5) {
+            for (let i = 0; i < 12 && !tw; i++) {
+                const side = Math.random() < 0.5 ? -1 : 1, xb = side * rnd(14, 16.5);
+                if (Scene.landAt(xb, G.dist + 100)) tw = { type: 'tower', xb, side, d: 100, mul: 1, done: false };
+            }
+        }
+        if (tw) {
+            G.hazards.push(tw);
             warn('WARNING: TOWER FALLING'); hazardTip();
         } else {
             const d0 = 165, sx = rnd(-22, 22), sy = rnd(14, 26);
@@ -406,7 +412,7 @@
 
     function hazardView() {
         return G.hazards.map((h) => (h.type === 'meteor'
-            ? { type: 'meteor', x: h.tx + (h.d / h.d0) * h.sx, y: h.ty + (h.d / h.d0) * h.sy, d: h.d, r: h.r, kx: h.kx, ky: h.ky, seed: h.seed }
+            ? { type: 'meteor', x: h.tx + (h.d / h.d0) * h.sx, y: h.ty + (h.d / h.d0) * h.sy, d: h.d, r: Math.max(0.01, h.r * clamp(1 + h.d / 4, 0, 1)), kx: h.kx, ky: h.ky, seed: h.seed }
             : { type: 'tower', xb: h.xb, d: h.d, phi: hazardPhi(h), side: h.side }));
     }
 

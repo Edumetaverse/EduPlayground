@@ -502,7 +502,7 @@
             h = (x, u) => {
                 const sd2 = sideOf(x);
                 const warp = fbm(x * 0.01, u * 0.01, sd, 3) * 3;
-                let y = 0.3 + 3.2 * (0.5 + 0.5 * Math.sin(u * 0.05 + warp)) * (0.5 + 0.5 * sd2) + (fbm(x * 0.03, u * 0.03, sd + 3, 3) - 0.5) * 1.5;
+                let y = 0.3 + 9 * (0.5 + 0.5 * Math.sin(u * 0.05 + warp)) * (0.1 + 0.9 * sd2) + 1.6 * (0.5 + 0.5 * Math.sin(u * 0.05 + warp)) + (fbm(x * 0.03, u * 0.03, sd + 3, 3) - 0.5) * 1.5;
                 const m = sstep(0.6, 0.66, fbm(x * 0.009 + 4, u * 0.009, sd + 6, 3));
                 y += sd2 * (14 + 22 * ridge(x * 0.02, u * 0.02, sd + 8, 3)) * m + sd2 * sd2 * 14 * fbm(x * 0.01, u * 0.01, sd + 12, 3);
                 return cap(x, y);
@@ -524,9 +524,9 @@
             }
             if (k === 'frost') {
                 if (slope > 0.5) return mixc([84, 100, 124], [120, 138, 160], n1);
-                let c = mixc([238, 246, 252], [204, 226, 244], n1);
-                if (y < lvl + 0.8) c = mixc(c, [160, 200, 232], 0.7);
-                if (y > 26) c = [248, 250, 255];
+                let c = mixc([212, 228, 244], [172, 202, 232], n1);
+                if (y < lvl + 0.8) c = mixc(c, [130, 176, 220], 0.7);
+                if (y > 26) c = [232, 240, 250];
                 return c;
             }
             if (k === 'crimson') {
@@ -541,9 +541,9 @@
                 return mixc([26, 10, 54], [60, 20, 110], m * 0.8 + n1 * 0.2);
             }
             // sunset
-            const lit = clamp(0.5 + nx * -0.9, 0.15, 1);
+            const lit = clamp(0.5 + nx * -1.6 + (y - 3) * 0.04, 0.02, 1);
             if (slope > 0.5) return mixc([138, 66, 56], [168, 88, 70], n1);
-            return mixc(mixc([120, 62, 44], [232, 160, 92], lit), [244, 190, 120], n2 * 0.4);
+            return mixc(mixc([92, 44, 40], [240, 168, 98], lit), [248, 196, 126], n2 * 0.35);
         };
         return { h, colour };
     }
@@ -1800,6 +1800,7 @@
         resetWingmen() { if (S.ready) S.wing.forEach((w) => { w.state = 'idle'; w.root.enabled = false; }); },
         get quality() { return S.quality; },
         groundAt(x, u) { return terrainY(x, u); },
+        landAt(x, u) { return !!(S.T && S.T.terrain) && (!S.T.fluid || S.tf.h(x, u) > S.T.fluid.level + 1.5); },
         get hasTerrain() { return !!(S.T && S.T.terrain); },
         onUpdate(fn) { S.app.on('update', fn); },
         get app() { return S.app; },
