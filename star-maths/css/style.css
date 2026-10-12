@@ -187,3 +187,24 @@ button { font-family: inherit; color: inherit; }
 .rsub { margin: -0.8cqw 0 1.4cqw; font-size: 1.1cqw; color: var(--yl); text-shadow: 0 0 1cqw rgba(255, 210, 63, 0.6); min-height: 1.2cqw; }
 
 .mis { display: block; margin-top: 0.6cqw; font-size: 0.72cqw; color: var(--gr); text-shadow: 0 0 0.6cqw rgba(89, 255, 154, 0.6); }
+
+/* targeting cursor */
+.sight { position: absolute; width: 3cqw; height: 3cqw; transform: translate(-50%, -50%); opacity: 0.85; pointer-events: none;
+    background:
+        linear-gradient(#fff, #fff) center / 0.2cqw 100% no-repeat,
+        linear-gradient(#fff, #fff) center / 100% 0.2cqw no-repeat;
+    filter: drop-shadow(0 0 0.15cqw #000) drop-shadow(0 0 0.4cqw #35d0ff);
+    -webkit-mask: radial-gradient(circle, transparent 0.35cqw, #000 0.37cqw);
+    mask: radial-gradient(circle, transparent 0.35cqw, #000 0.37cqw);
+}
+.reticle { position: absolute; aspect-ratio: 1; transform: translate(-50%, -50%); pointer-events: none; --rc: #ffd23f; animation: lockon 0.28s ease-out; }
+.reticle .ring { position: absolute; inset: 14%; border: 0.22cqw dashed var(--rc); border-radius: 50%; animation: spin 4s linear infinite; filter: drop-shadow(0 0 0.5cqw var(--rc)); opacity: 0.9; }
+.reticle .br { position: absolute; width: 20%; height: 20%; border: 0 solid var(--rc); filter: drop-shadow(0 0 0.4cqw var(--rc)); }
+.reticle .tl { left: 0; top: 0; border-left-width: 0.42cqw; border-top-width: 0.42cqw; }
+.reticle .tr { right: 0; top: 0; border-right-width: 0.42cqw; border-top-width: 0.42cqw; }
+.reticle .bl { left: 0; bottom: 0; border-left-width: 0.42cqw; border-bottom-width: 0.42cqw; }
+.reticle .brr { right: 0; bottom: 0; border-right-width: 0.42cqw; border-bottom-width: 0.42cqw; }
+.reticle .rlabel { position: absolute; left: 50%; top: 100%; transform: translate(-50%, 0.4cqw); white-space: nowrap; font-size: 1cqw; color: var(--rc); text-shadow: 0 0 0.6cqw var(--rc), 0 0.15cqw 0 #000, 0 -0.1cqw 0 #000; }
+.reticle.threat .ring { animation-duration: 1.2s; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes lockon { from { transform: translate(-50%, -50%) scale(1.6); opacity: 0; } to { transform: translate(-50%, -50%) scale(1); opacity: 1; } }

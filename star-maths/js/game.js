@@ -90,7 +90,7 @@
         if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
         Object.assign(G, {
             warnedLow: false, fuel: 100, score: 0, streak: 0, best: 0, qIdx: 0, correct: 0, wrong: 0, missed: [], lastText: '', q: null,
-            briefed: G.briefed, gates: [], hazards: [], missiles: [], missileCd: 0, dodge: 0, rollDir: 1, fadeGates: false, dock: null, invuln: 0, phase: 'idle', phaseT: 0, shake: 0, endT: 0, endKind: '', rollT: 0, rollCd: 0, lowT: 0, outcome: null,
+            briefed: G.briefed, gates: [], hazards: [], missiles: [], missileCd: 0, dodge: 0, rollDir: 1, fadeGates: false, lock: null, manual: null, dock: null, invuln: 0, phase: 'idle', phaseT: 0, shake: 0, endT: 0, endKind: '', rollT: 0, rollCd: 0, lowT: 0, outcome: null,
             state: 'ready', readyT: 4.1
         });
         G.ship.x = 0; G.ship.y = 0; G.ship.vx = 0; G.ship.vy = 0; G.ship.roll = 0; G.ship.alive = true;
@@ -300,7 +300,7 @@
         setText('hSpeed', G.state === 'dock' ? 'DOCKING' : 'SPEED ' + Math.round(G.speed / Q.LEVELS[G.level].speed * 100) + '%');
         const f = Math.round(G.fuel);
         setText('hFuelNum', String(f));
-        setText('hMis', G.missileCd > 0 ? 'MISSILE RELOADING' : 'MISSILE READY');
+        setText('hMis', (G.missileCd > 0 ? 'MISSILE RELOADING' : 'MISSILE READY') + '   Q E CHANGE TARGET');
         $('hFuelBar').style.width = clamp(G.fuel, 0, 100) + '%';
         const fe = $('fuel');
         fe.classList.toggle('low', G.fuel <= 25);
@@ -348,33 +348,105 @@
     const MISSILE_SPEED = 130;
     const meteorPos = (h) => ({ x: h.tx + (h.d / h.d0) * h.sx, y: h.ty + (h.d / h.d0) * h.sy });
 
-    // An incoming meteor near the ship is shot first (it is the thing about to hit you). Otherwise the missile
-    // goes for the answer gate nearest the ship's line of fire.
-    function pickTarget() {
-        const s = G.ship;
-        let threat = null;
-        for (const h of G.hazards) {
-            if (h.type !== 'meteor' || h.done || h.d < 4 || h.d > 110) continue;
-            const p = meteorPos(h);
-            if (Math.hypot(s.x - p.x, s.y - p.y) < 6.5 && (!threat || h.d < threat.d)) threat = h;
-        }
-        if (threat) return { type: 'meteor', hazard: threat };
-        let best = null, bd = 1e9;
+    /* ---------- targeting: the reticle always sits on what the missile will hit ---------- */
+
+    // everything a missile could be fired at, with its world position and size
+    function targetList() {
+        const list = [];
         if (G.phase === 'approach') {
-            for (const g of G.gates) {
-                const d = Math.hypot(s.x - g.x, s.y - g.y);
-                if (d < bd && d < C.GATE_R * 2.2) { best = { type: 'gate', gate: g }; bd = d; }
+            for (const g of G.gates) if (g.d > 2) list.push({ type: 'gate', ref: g, x: g.x, y: g.y, z: -g.d, r: C.GATE_R });
+        }
+        for (const h of G.hazards) {
+            if (h.type !== 'meteor' || h.done || h.d < 4 || h.d > 140) continue;
+            const p = meteorPos(h);
+            list.push({ type: 'meteor', ref: h, x: p.x, y: p.y, z: -h.d, r: h.r * 1.5 });
+        }
+        return list;
+    }
+
+    function updateLock() {
+        const list = targetList();
+        if (!list.length || G.state !== 'play') { G.lock = null; G.manual = null; return; }
+        const s = G.ship;
+        let pick = null;
+
+        // 1. the mouse pointer: hovering over a gate or meteor locks it
+        if (G.input === 'mouse') {
+            let bd = 1e9;
+            for (const t of list) {
+                const p = Scene.project(t.x, t.y, t.z, t.r);
+                if (!p || p.behind) continue;
+                const d = Math.hypot((G.mx - p.x) * 16, (G.my - p.y) * 9), reach = Math.max(p.r * 16, 0.5) * 1.2 + 0.4;
+                if (d < reach && d < bd) { pick = t; bd = d; }
             }
         }
-        return best;
+        // 2. a target chosen with Q and E stays chosen
+        if (!pick && G.manual) pick = list.find((t) => t.ref === G.manual) || null;
+        if (!pick) G.manual = null;
+        // 3. an incoming meteor close to the ship
+        if (!pick) {
+            let best = null;
+            for (const t of list) {
+                if (t.type !== 'meteor' || t.ref.d > 110 || Math.hypot(s.x - t.x, s.y - t.y) > 6.5) continue;
+                if (!best || t.ref.d < best.ref.d) best = t;
+            }
+            pick = best;
+        }
+        // 4. otherwise the answer gate nearest the ship
+        if (!pick) {
+            let bd = 1e9;
+            for (const t of list) {
+                if (t.type !== 'gate') continue;
+                const d = Math.hypot(s.x - t.x, s.y - t.y);
+                if (d < bd) { pick = t; bd = d; }
+            }
+        }
+        G.lock = pick;
+    }
+
+    // Q and E move the lock left and right across the targets
+    function cycleTarget(dir) {
+        if (G.state !== 'play') return;
+        const list = targetList().map((t) => ({ t, p: Scene.project(t.x, t.y, t.z, 0) })).filter((o) => o.p && !o.p.behind);
+        if (!list.length) return;
+        list.sort((a, b) => a.p.x - b.p.x);
+        let i = G.lock ? list.findIndex((o) => o.t.ref === G.lock.ref) : -1;
+        i = i < 0 ? (dir > 0 ? 0 : list.length - 1) : (i + dir + list.length) % list.length;
+        G.manual = list[i].t.ref;
+        G.lock = list[i].t;
+        Snd.blip();
     }
 
     function fireMissile() {
         if (G.state !== 'play' || G.missileCd > 0) return;
         G.missileCd = MISSILE_CD;
         const s = G.ship;
-        G.missiles.push({ x: s.x, y: s.y, dm: 2, t: 0, target: pickTarget() });
+        const t = G.lock;
+        G.missiles.push({ x: s.x, y: s.y, dm: 2, t: 0, target: t ? (t.type === 'gate' ? { type: 'gate', gate: t.ref } : { type: 'meteor', hazard: t.ref }) : null });
         Snd.missile();
+    }
+
+    // the reticle on the locked target, plus a small sight showing where the ship is pointing
+    function updateReticle() {
+        const ret = $('reticle'), sight = $('sight');
+        if (G.state !== 'play') { ret.classList.add('hidden'); sight.classList.add('hidden'); return; }
+        const sp = Scene.project(G.ship.x, G.ship.y, -42, 0);
+        if (sp && !sp.behind) {
+            sight.classList.remove('hidden');
+            sight.style.left = (sp.x * 100) + '%'; sight.style.top = (sp.y * 100) + '%';
+        } else sight.classList.add('hidden');
+        const t = G.lock;
+        const p = t && Scene.project(t.x, t.y, t.z, t.r);
+        if (!t || !p || p.behind) { ret.classList.add('hidden'); return; }
+        ret.classList.remove('hidden');
+        ret.style.left = (p.x * 100) + '%'; ret.style.top = (p.y * 100) + '%';
+        const w = clamp(p.r * 2 * 1.45 * 100, 7.5, 60);
+        ret.style.width = w + '%';
+        const col = t.type === 'gate' ? C.LANE_COL[t.ref.lane] : '#ff4040';
+        ret.style.setProperty('--rc', col);
+        ret.classList.toggle('threat', t.type === 'meteor');
+        const label = t.type === 'gate' ? 'LOCKED ' + t.ref.val : 'METEOR';
+        if (last.lockLabel !== label) { last.lockLabel = label; $('rLabel').textContent = label; }
     }
 
     function updateMissiles(dt) {
@@ -597,7 +669,7 @@
                 if (last.ready !== txt) {
                     last.ready = txt;
                     r.className = 'ready';
-                    r.innerHTML = txt + '<small>STEER WITH ARROWS, WASD OR THE MOUSE<br>SPACE FIRES A MISSILE &nbsp; Z AND C ROLL</small>';
+                    r.innerHTML = txt + '<small>STEER WITH ARROWS, WASD OR THE MOUSE<br>SPACE FIRES AT THE LOCKED TARGET &nbsp; Q E CHANGE TARGET &nbsp; Z C ROLL</small>';
                 }
             } else if (G.readyT > 0) {
                 if (last.ready !== 'GO') { last.ready = 'GO'; Snd.go(); r.className = 'ready go'; r.innerHTML = 'GO!'; }
@@ -605,7 +677,7 @@
                 last.ready = ''; r.innerHTML = ''; r.className = 'ready';
                 G.state = 'play';
                 spawnQuestion();
-                if (!G.briefed) { G.briefed = true; advise('Fly through the gate with the right answer, or press space to fire a missile at it. Z and C roll you left and right. A wrong answer costs a third of your fuel!', true); }
+                if (!G.briefed) { G.briefed = true; advise('Fly through the right gate, or lock on to it and press space to fire a missile. The reticle shows your target. Move the mouse over a gate or press Q and E to change it. A wrong answer costs a third of your fuel!', true); }
             }
         } else if (G.state === 'play' && !paused) {
             for (const g of G.gates) {
@@ -615,6 +687,7 @@
             }
             updateHazards(dt);
             updateMissiles(dt);
+            updateLock();
             if (G.phase === 'approach') {
                 const d = G.gates[0].d;
                 $('hQBar').style.width = clamp((1 - d / C.SPAWN_D) * 100, 0, 100) + '%';
@@ -649,6 +722,7 @@
             gates: G.gates, hazards: hazardView(), missiles: G.missiles.map((m) => ({ x: m.x, y: m.y, z: -m.dm })), speed: G.speed, dist: G.dist, shake: G.shake * 0.5,
             dock: G.dock ? { active: true, z: G.dock.z, open: G.dock.open } : null, dockCam: G.dock ? G.dock.cam : 0
         }, sdt || 0);
+        updateReticle();
     }
 
     /* ---------- input ---------- */
@@ -680,6 +754,8 @@
                 if (e.code === 'Space') fireMissile();
                 if (e.code === 'KeyZ') doRoll(-1);
                 if (e.code === 'KeyC') doRoll(1);
+                if (e.code === 'KeyQ') cycleTarget(-1);
+                if (e.code === 'KeyE') cycleTarget(1);
                 if (e.code === 'Escape' || e.code === 'KeyP') pause();
                 break;
             case 'paused':

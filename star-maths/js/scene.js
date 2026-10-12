@@ -1758,6 +1758,22 @@
         S.hangarBeacons.forEach((m, i) => { m.emissiveIntensity = ((t * 1.5 + i * 0.3) % 1) < 0.5 ? 5 : 0.3; });
     }
 
+    /* ---------- screen projection, used by the game's targeting cursor ---------- */
+    let _pv = null, _po, _pr, _pt;
+    function project(x, y, z, r) {
+        if (!S.ready) return null;
+        if (!_pv) { _pv = new pc.Vec3(); _po = new pc.Vec3(); _pr = new pc.Vec3(); _pt = new pc.Vec3(); }
+        const cam = S.cam.camera, rect = S.device.clientRect;
+        if (!rect.width || !rect.height) return null;
+        _pv.set(x, y, z);
+        const behind = cam.viewMatrix.transformPoint(_pv, _pt).z >= 0;
+        cam.worldToScreen(_pv, _po);
+        const nx = _po.x / rect.width, ny = _po.y / rect.height;
+        let rad = 0;
+        if (r) { _pv.set(x + r, y, z); cam.worldToScreen(_pv, _pr); rad = Math.abs(_pr.x - _po.x) / rect.width; }
+        return { x: nx, y: ny, r: rad, behind };
+    }
+
     /* ---------- init ---------- */
     async function init(canvas) {
         const device = await pc.createGraphicsDevice(canvas, { deviceTypes: ['webgl2'], antialias: false, powerPreference: 'high-performance' });
@@ -1953,6 +1969,7 @@
         wingName(i) { return S.wing[i].name; },
         resetWingmen() { if (S.ready) S.wing.forEach((w) => { w.state = 'idle'; w.root.enabled = false; }); },
         get quality() { return S.quality; },
+        project,
         groundAt(x, u) { return terrainY(x, u); },
         landAt(x, u) { return !!(S.T && S.T.terrain) && (!S.T.fluid || S.tf.h(x, u) > S.T.fluid.level + 1.5); },
         get hasTerrain() { return !!(S.T && S.T.terrain); },

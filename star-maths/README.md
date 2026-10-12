@@ -26,14 +26,15 @@ It needs a browser with WebGL 2 (current Chrome, Edge, Firefox or Safari).
 | Action | Keyboard | Mouse or touch |
 | --- | --- | --- |
 | Fly | Arrow keys or WASD | Move the mouse (or drag) |
-| Fire a missile | Space | Left click or tap |
+| Fire a missile at the locked target | Space | Left click or tap |
+| Change target | Q (left) and E (right) | Move the pointer over a gate or meteor |
 | Roll left | Z | Right click on the left half of the screen |
 | Roll right | C | Right click on the right half of the screen |
 | Pause | P or Esc | Pause button |
 | Sound | M | Speaker button |
 | Full screen | F | Full screen button |
 
-Fire a missile and it homes in on whatever is closest to your line of fire. Aim at an answer gate and the missile answers for you. A right answer by missile is worth 60% of the points of flying through it, and a wrong one costs just the same fuel. If a meteor is coming at you, the missile goes for that first and blasts it for 25 points. Rolling also slides you sideways, which is handy for dodging.
+A targeting reticle shows exactly what your missile will hit, with the answer number written under it, so you can check it before you fire. By default it locks the gate nearest your ship, or an incoming meteor that is close to you. Press Q or E to move the lock left or right across the gates, or with the mouse just move the pointer over the gate you want and click. The missile then homes in and answers for you. A right answer by missile is worth 60% of the points of flying through it, and a wrong one costs the same third of the tank. Shooting a meteor down earns 25 points. A small sight in front of the ship shows where it is pointing. Rolling also slides you sideways, which is handy for dodging.
 
 On the home screen use left and right to pick a subject, up and down to pick a level, and Enter to start.
 
