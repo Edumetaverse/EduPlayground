@@ -1,6 +1,6 @@
 # Star Maths
 
-A maths game in the style of Star Fox. Answer gates fly through space towards your ship. Fly through the right one. Wrong answers cost fuel, right answers give a little back.
+A maths game in the style of Star Fox. Answer gates fly towards your jet. Fly through the right one. Wrong answers cost fuel, right answers give a little back. Answer all 20 questions, then dock with the mothership to win.
 
 ## Playing
 
@@ -17,7 +17,7 @@ cd star-maths
 python3 -m http.server 8000
 ```
 
-Then visit http://localhost:8000. Use a web server rather than double clicking `index.html`, because browsers restrict some features for pages opened straight from disk.
+Then visit http://localhost:8000. Use a web server rather than double clicking `index.html`. Browsers will not load the jet model from a file on disk, so the game would fall back to its plainer built in craft.
 
 It needs a browser with WebGL 2 (current Chrome, Edge, Firefox or Safari).
 
@@ -37,11 +37,11 @@ On the home screen use left and right to pick a subject, up and down to pick a l
 
 ### Subjects
 
-Addition, subtraction, multiplication, division, mixed operations (including order of operations) and missing numbers. Each subject has its own stage: Azure Sector, Frost Sector, Asteroid Belt, Crimson Canyon, Neon Nebula and Sunset Ridge.
+Addition, subtraction, multiplication, division, mixed operations (including order of operations) and missing numbers. Each subject has its own stage with its own terrain: Azure Sector (hills, rivers and glass towers), Frost Sector (snowfields, frozen lakes and ice crystals), Asteroid Belt (cratered rocks in deep space), Crimson Canyon (lava rivers, basalt and obsidian spires), Neon Nebula (a glowing grid world) and Sunset Ridge (dunes, mesas and amethyst crystals).
 
 ### Levels
 
-| Level | Speed | Wrong answer | Right answer |
+| Level | Starting speed | Wrong answer | Right answer |
 | --- | --- | --- | --- |
 | 1 Cadet | slowest | lose 15 fuel | gain 6 |
 | 2 Pilot | | lose 18 | gain 5 |
@@ -49,7 +49,14 @@ Addition, subtraction, multiplication, division, mixed operations (including ord
 | 4 Captain | | lose 25 | gain 4 |
 | 5 Legend | fastest | lose 28 | gain 4 |
 
-Numbers get bigger and the questions trickier as the level goes up. A mission is 20 gates. Fly through none of the gates and it counts as a wrong answer. Run out of fuel and the mission ends. The gates also speed up a little as the mission goes on.
+Numbers get bigger and the questions trickier as the level goes up. Your jet gets about 3% faster after every question, so the last gates come much quicker than the first.
+
+### A mission
+
+1. Answer 20 questions. Each question is three gates. Fly through the right one. Flying through none of them counts as a wrong answer.
+2. Watch out for hazards. From the fourth question on, a meteorite may streak across your path, or on ground stages a tower may topple across the lanes. Steer around them. A hit costs some fuel but does not count as a wrong answer.
+3. Run out of fuel and the mission ends.
+4. Answer all 20 and the docking sequence begins. Your wingmen escort you to the mothership, the bay doors open and you fly in. Dock safely to win and collect a 500 point bonus.
 
 ### Wingmen
 
@@ -73,6 +80,7 @@ The game starts at full quality and steps down by itself if the frame rate drops
 | `js/audio.js` | Synthesised sound effects and music (WebAudio, no files). |
 | `css/` | Styles, plus the embedded pixel font. |
 | `lib/playcanvas.min.js` | The PlayCanvas engine, built from https://github.com/Edumetaverse/playcanvasengine |
+| `assets/` | The jet model and the decoders it needs |
 
 ## Rebuilding the engine
 
@@ -86,5 +94,6 @@ cp build/playcanvas.min.js ../EduPlayground/star-maths/lib/
 
 ## Credits
 
-* PlayCanvas engine, MIT licence, Copyright PlayCanvas Ltd.
+* Jet fighter model: "Mitsubishi F-2 - Fighter Jet - Free" by bohmerang on Sketchfab, licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Source: https://sketchfab.com/3d-models/mitsubishi-f-2-fighter-jet-free-d3d7244554974f499b106e6c11fe3aaf. The model comes from the PlayCanvas engine's example assets and is used here unchanged apart from tinting the paint colour for the wingmen.
+* PlayCanvas engine, MIT licence, Copyright PlayCanvas Ltd. The Draco and Basis decoders in `assets/wasm` are from the same repository.
 * Press Start 2P font by CodeMan38, SIL Open Font License 1.1.

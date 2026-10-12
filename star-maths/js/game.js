@@ -72,7 +72,7 @@
         G.state = 'menu';
         ['hud', 'pause', 'result'].forEach((id) => $(id).classList.add('hidden'));
         $('menu').classList.remove('hidden');
-        G.ship.alive = true; G.gates = []; G.pending = null;
+        G.ship.alive = true; G.gates = []; G.hazards = []; G.dock = null; G.pending = null;
         hideComms(); Scene.resetWingmen();
         refreshMenu();
         Snd.startMusic('menu', Q.SUBJECTS[G.subj].theme);
@@ -84,7 +84,7 @@
         if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
         Object.assign(G, {
             warnedLow: false, fuel: 100, score: 0, streak: 0, best: 0, qIdx: 0, correct: 0, wrong: 0, missed: [], lastText: '', q: null,
-            briefed: G.briefed, gates: [], phase: 'idle', phaseT: 0, shake: 0, endT: 0, endKind: '', rollT: 0, rollCd: 0, lowT: 0, outcome: null,
+            briefed: G.briefed, gates: [], hazards: [], dock: null, invuln: 0, phase: 'idle', phaseT: 0, shake: 0, endT: 0, endKind: '', rollT: 0, rollCd: 0, lowT: 0, outcome: null,
             state: 'ready', readyT: 4.1
         });
         G.ship.x = 0; G.ship.y = 0; G.ship.vx = 0; G.ship.vy = 0; G.ship.roll = 0; G.ship.alive = true;
@@ -116,6 +116,7 @@
         }));
         G.qIdx++;
         G.phase = 'approach'; G.phaseT = 0;
+        maybeSpawnHazard();
         $('hQ').textContent = q.text;
         $('hQLabel').textContent = Q.SUBJECTS[G.subj].id === 'mis' ? 'FIND THE MISSING NUMBER' : 'FLY THROUGH THE ANSWER';
         fitQuestion();
@@ -170,6 +171,7 @@
     }
 
     function resolveGates() {
+        if (G.state !== 'play') return;
         const L = Q.LEVELS[G.level];
         const s = G.ship;
         let hit = null, hitD = 1e9;
@@ -219,6 +221,7 @@
     }
 
     function die() {
+        if (G.state === 'dying') return;
         G.state = 'dying';
         hideComms();
         G.ship.alive = false;
@@ -231,6 +234,8 @@
 
     function finish(win) {
         G.state = 'over';
+        G.hazards = [];
+        if (!win) G.dock = null;
         hideComms();
         Snd.stopMusic();
         if (win) { Snd.win(); G.score += Math.round(G.fuel) * 10; } else Snd.lose();
@@ -241,7 +246,8 @@
         const total = G.correct + G.wrong;
         const acc = total ? Math.round(G.correct / total * 100) : 0;
         $('hud').classList.add('hidden');
-        $('rTitle').textContent = win ? 'MISSION COMPLETE' : 'OUT OF FUEL';
+        $('rTitle').textContent = win ? 'YOU WIN!' : 'OUT OF FUEL';
+        $('rSub').textContent = win ? 'DOCKING COMPLETE  +500 BONUS' : '';
         $('rRank').textContent = win ? (acc >= 95 ? 'S' : acc >= 85 ? 'A' : acc >= 70 ? 'B' : 'C') : `${G.correct}/${MISSION}`;
         $('rScore').textContent = pad6(G.score);
         $('rAcc').textContent = acc + '%';
@@ -259,7 +265,7 @@
     }
 
     function pause() {
-        if (G.state !== 'play' && G.state !== 'ready') return;
+        if (G.state !== 'play' && G.state !== 'ready' && G.state !== 'dock') return;
         G.prev = G.state; G.state = 'paused';
         $('pause').classList.remove('hidden');
     }
@@ -276,6 +282,7 @@
         setText('hScore', pad6(G.score));
         setText('hGate', `GATE ${String(Math.min(G.qIdx, MISSION)).padStart(2, '0')}/${MISSION}`);
         setText('hStreak', G.streak >= 2 ? `STREAK x${G.streak}` : '');
+        setText('hSpeed', G.state === 'dock' ? 'DOCKING' : 'SPEED ' + Math.round(G.speed / Q.LEVELS[G.level].speed * 100) + '%');
         const f = Math.round(G.fuel);
         setText('hFuelNum', String(f));
         $('hFuelBar').style.width = clamp(G.fuel, 0, 100) + '%';
@@ -315,6 +322,147 @@
         Scene.burst('roll', G.ship.x, G.ship.y, 0);
     }
 
+    /* ---------- hazards: meteorites and falling towers ---------- */
+    const rnd = (a, b) => a + Math.random() * (b - a);
+    const smooth01 = (t) => { t = clamp(t, 0, 1); return t * t * (3 - 2 * t); };
+    const TOWER_H = 33;
+
+    function maybeSpawnHazard() {
+        if (G.qIdx < 3 || G.hazards.length) return;
+        if (Math.random() > 0.3 + 0.06 * G.level) return;
+        const tower = Scene.hasTerrain && Math.random() < 0.5;
+        if (tower) {
+            const side = Math.random() < 0.5 ? -1 : 1;
+            G.hazards.push({ type: 'tower', xb: side * rnd(14, 16.5), side, d: 100, mul: 1, done: false });
+            warn('WARNING: TOWER FALLING'); hazardTip();
+        } else {
+            const d0 = 165, sx = rnd(-22, 22), sy = rnd(14, 26);
+            G.hazards.push({
+                type: 'meteor', tx: C.LANES[(Math.random() * 3) | 0] + rnd(-1.5, 1.5), ty: rnd(-3, 3.5), sx, sy, d0, d: d0, mul: 1.55,
+                r: rnd(1.3, 2.1), kx: sx / d0, ky: sy / d0, seed: Math.random(), done: false
+            });
+            warn('WARNING: METEOR INCOMING'); hazardTip();
+        }
+    }
+
+    function hazardTip() {
+        if (G.hazardTold) return;
+        G.hazardTold = true;
+        advise('Hazard ahead! Steer around it. A hit costs some fuel but it does not count as a wrong answer.', true);
+    }
+
+    function warn(text) {
+        const w = $('hWarn');
+        w.textContent = text;
+        w.className = 'warn';
+        void w.offsetWidth;
+        w.className = 'warn on';
+        Snd.warn();
+    }
+
+    // distance from point p to the segment a-b
+    function segDist(px, py, ax, ay, bx, by) {
+        const vx = bx - ax, vy = by - ay, l2 = vx * vx + vy * vy || 1;
+        const t = clamp(((px - ax) * vx + (py - ay) * vy) / l2, 0, 1);
+        return Math.hypot(px - (ax + vx * t), py - (ay + vy * t));
+    }
+
+    function hazardPhi(h) { return 78 * smooth01((70 - h.d) / 70); }
+
+    function updateHazards(dt) {
+        if (G.invuln > 0) G.invuln -= dt;
+        for (const h of G.hazards) {
+            h.d -= G.speed * h.mul * dt;
+            if (!h.done && h.d <= 0) {
+                h.done = true;
+                let hit = false;
+                const s = G.ship;
+                if (h.type === 'meteor') {
+                    hit = Math.hypot(s.x - h.tx, s.y - h.ty) < h.r * 0.95 + 0.9;
+                } else {
+                    const gy = Scene.groundAt(h.xb, G.dist);
+                    const phi = hazardPhi(h) * Math.PI / 180;
+                    const tipX = h.xb - h.side * TOWER_H * Math.sin(phi), tipY = gy + TOWER_H * Math.cos(phi);
+                    hit = segDist(s.x, s.y, h.xb, gy, tipX, tipY) < 2.9 + 0.9;
+                }
+                if (hit && G.invuln <= 0 && G.state === 'play') hazardHit(h);
+            }
+        }
+        G.hazards = G.hazards.filter((h) => h.d > -16);
+    }
+
+    function hazardHit(h) {
+        const L = Q.LEVELS[G.level];
+        const loss = Math.round(L.penalty * 0.6);
+        G.fuel = Math.max(0, G.fuel - loss);
+        G.streak = 0;
+        G.invuln = 1.6; G.shake = 1.2;
+        Scene.burst('bad', G.ship.x, G.ship.y, 0);
+        Snd.bad(); flash('bad');
+        banner(h.type === 'meteor' ? 'METEOR HIT!' : 'TOWER HIT!', `-${loss} FUEL`, 'bad');
+        updateHud(true);
+        if (G.fuel <= 0) { G.outcome = 'dead'; die(); }
+    }
+
+    function hazardView() {
+        return G.hazards.map((h) => (h.type === 'meteor'
+            ? { type: 'meteor', x: h.tx + (h.d / h.d0) * h.sx, y: h.ty + (h.d / h.d0) * h.sy, d: h.d, r: h.r, kx: h.kx, ky: h.ky, seed: h.seed }
+            : { type: 'tower', xb: h.xb, d: h.d, phi: hazardPhi(h), side: h.side }));
+    }
+
+    /* ---------- docking and the win sequence ---------- */
+    function showComms(name, text) {
+        const c = $('hComms');
+        c.style.setProperty('--wc', WING_COL[name]);
+        $('hCallsign').textContent = name + ' ON COMMS';
+        $('hCommsText').textContent = text;
+        c.classList.add('on');
+        Snd.comm();
+    }
+
+    function beginDocking() {
+        G.state = 'dock';
+        G.gates = []; G.hazards = []; G.pending = null;
+        G.dock = { z: -330, open: 0, phase: 'approach', t: 0, cam: 0 };
+        $('hQLabel').textContent = 'MISSION COMPLETE';
+        $('hQ').textContent = 'DOCKING SEQUENCE';
+        $('hQ').style.fontSize = '';
+        $('hQBar').style.width = '100%';
+        banner('MISSION COMPLETE!', 'PROCEED TO THE DOCKING BAY', 'good');
+        Snd.win();
+        // the three wingmen escort the player in, then peel away before the bay
+        Scene.callWingman(0, 4.4, {
+            onArrive() { Snd.flyIn(); },
+            onHold() { showComms('SPARK', 'Docking clearance granted. Nice flying out there. Bring her in nice and steady!'); },
+            onLeave() { hideComms(); Snd.flyOut(); }
+        }, G.ship.x, { side: -1, ox: -5.2, oy: 1.6, peel: true });
+        Scene.callWingman(1, 5.2, { onArrive() { Snd.flyIn(); }, onLeave() { Snd.flyOut(); } }, G.ship.x, { side: 1, ox: 5.2, oy: 1.6, peel: true });
+        Scene.callWingman(2, 5.9, { onArrive() { Snd.flyIn(); }, onLeave() { Snd.flyOut(); } }, G.ship.x, { side: 1, ox: 9.4, oy: 4.4, peel: true });
+    }
+
+    function updateDock(dt) {
+        const D = G.dock, s = G.ship;
+        const zt = 6, rem = zt - D.z;
+        const k = 1 - Math.exp(-2.2 * dt);
+        const ox = s.x, oy = s.y;
+        s.x += (0 - s.x) * k; s.y += (0.5 - s.y) * k;
+        s.vx = (s.x - ox) / Math.max(dt, 1e-3); s.vy = (s.y - oy) / Math.max(dt, 1e-3);
+        D.z += G.speed * dt;
+        D.cam = smooth01((D.z + 70) / 70);
+        if (D.phase === 'approach') {
+            D.open = smooth01((D.z + 80) / 45);
+            if (rem < 0.4) {
+                D.phase = 'docked'; D.t = 0;
+                banner('DOCKING COMPLETE', 'WELCOME HOME, PILOT', 'good');
+                Snd.dock();
+            }
+        } else {
+            D.t += dt;
+            D.open = Math.max(0, D.open - dt * 0.6);
+            if (D.t > 3.2) { G.score += 500; G.bonus = 500; finish(true); }
+        }
+    }
+
     function tick(dt) {
         if (!Scene.ready || G.state === 'boot') return;
         const paused = G.state === 'paused';
@@ -323,18 +471,19 @@
 
         // forward speed
         let target = 22;
-        if (G.state === 'play') target = L.speed * (1 + 0.012 * Math.min(G.qIdx, MISSION));
+        if (G.state === 'play') target = L.speed * (1 + 0.03 * Math.min(G.qIdx, MISSION));
+        else if (G.state === 'dock') target = G.dock.phase === 'approach' ? clamp((6 - G.dock.z) * 0.55, 3.2, 70) : 0;
         else if (G.state === 'dying') target = 6;
-        else if (G.state === 'over') target = 10;
+        else if (G.state === 'over') target = G.dock ? 0 : 10;
         if (paused) target = 0;
-        G.speed += (target - G.speed) * Math.min(1, dt * 3);
+        G.speed += (target - G.speed) * Math.min(1, dt * (G.state === 'dock' ? 2 : 3));
         if (paused) G.speed = 0;
         const sdt = paused ? 0 : dt;
         G.dist += G.speed * sdt;
 
         // ship
         const s = G.ship;
-        if (G.state === 'menu' || G.state === 'over') {
+        if (G.state === 'menu' || (G.state === 'over' && !G.dock)) {
             const ox = s.x, oy = s.y;
             s.x = Math.sin(G.t * 0.55) * 6.5; s.y = 0.6 + Math.sin(G.t * 0.8) * 2.4;
             s.vx = (s.x - ox) / Math.max(dt, 1e-3); s.vy = (s.y - oy) / Math.max(dt, 1e-3);
@@ -371,6 +520,7 @@
                 g.d -= G.speed * dt;
                 if (g.state !== 'idle') g.t = Math.min(1, g.t + dt / 0.9);
             }
+            updateHazards(dt);
             if (G.phase === 'approach') {
                 const d = G.gates[0].d;
                 $('hQBar').style.width = clamp((1 - d / C.SPAWN_D) * 100, 0, 100) + '%';
@@ -381,7 +531,7 @@
                 const hold = G.outcome ? G.endT : (G.level >= 3 ? 1.0 : 1.3);
                 if (G.phaseT >= hold) {
                     if (G.outcome === 'dead') die();
-                    else if (G.outcome === 'win') { finish(true); }
+                    else if (G.outcome === 'win') { beginDocking(); }
                     else spawnQuestion();
                 }
             }
@@ -389,6 +539,8 @@
                 G.lowT -= dt;
                 if (G.lowT <= 0) { G.lowT = 1.1; Snd.lowFuel(); if (!G.warnedLow) { G.warnedLow = true; advise('Fuel is getting low. Read the question, work it out, then pick your gate.'); } }
             }
+        } else if (G.state === 'dock' && !paused) {
+            updateDock(dt);
         } else if (G.state === 'dying') {
             G.endT -= dt;
             for (const g of G.gates) { g.d -= G.speed * dt; if (g.state !== 'idle') g.t = Math.min(1, g.t + dt / 0.9); }
@@ -396,11 +548,12 @@
         }
 
         if (G.pending && !Scene.wingBusy && G.state === 'play') { const p = G.pending; G.pending = null; advise(p.text, true); }
-        if (G.state === 'play' || G.state === 'ready') updateHud();
+        if (G.state === 'play' || G.state === 'ready' || G.state === 'dock') updateHud();
 
         Scene.frame({
             ship: { x: s.x, y: s.y, vx: s.vx, vy: s.vy, roll: s.roll, alive: s.alive },
-            gates: G.gates, speed: G.speed, dist: G.dist, shake: G.shake * 0.5
+            gates: G.gates, hazards: hazardView(), speed: G.speed, dist: G.dist, shake: G.shake * 0.5,
+            dock: G.dock ? { active: true, z: G.dock.z, open: G.dock.open } : null, dockCam: G.dock ? G.dock.cam : 0
         }, sdt || 0);
     }
 
@@ -422,6 +575,9 @@
                 else if (e.code === 'ArrowUp') { setLevel(G.level - 1); Snd.blip(); }
                 else if (e.code === 'ArrowDown') { setLevel(G.level + 1); Snd.blip(); }
                 else if (e.code === 'Enter' || e.code === 'Space') startMission();
+                break;
+            case 'dock':
+                if (e.code === 'Escape' || e.code === 'KeyP') pause();
                 break;
             case 'ready':
             case 'play':
@@ -478,6 +634,8 @@
     $('bPause').addEventListener('click', () => (G.state === 'paused' ? resume() : pause()));
     $('bFull').addEventListener('click', toggleFull);
     $('bMute').classList.toggle('muted', Snd.muted);
+
+    root.SM.dev = { beginDocking, startMission, finish, spawnQuestion };
 
     /* ---------- boot ---------- */
     buildMenu();

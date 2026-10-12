@@ -19,12 +19,13 @@
       <span id="hQ" class="q">&nbsp;</span>
       <div class="qbar"><i id="hQBar"></i></div>
     </div>
-    <div class="box gatecount"><span class="lbl" id="hSubj">ADDITION</span><span id="hGate" class="val sm">GATE 01/20</span></div>
+    <div class="box gatecount"><span class="lbl" id="hSubj">ADDITION</span><span id="hGate" class="val sm">GATE 01/20</span><span id="hSpeed" class="lbl sp"></span></div>
     <div id="fuel" class="fuel">
       <span class="lbl">FUEL</span>
       <div class="fbar"><i id="hFuelBar"></i><b id="hFuelNum">100</b></div>
       <span id="hLow" class="low">LOW FUEL</span>
     </div>
+    <div id="hWarn" class="warn"></div>
     <div id="hMsg" class="msg"></div>
     <div id="hComms" class="comms"><div class="face" id="hFace"></div><div class="ctext"><span id="hCallsign" class="callsign"></span><p id="hCommsText"></p></div></div>
     <div id="hReady" class="ready"></div>
@@ -46,6 +47,7 @@
     <button id="start" class="start" type="button">&#9654; START MISSION</button>
     <div class="foot">ARROWS OR MOUSE TO FLY &nbsp;&bull;&nbsp; SPACE OR CLICK TO BARREL ROLL &nbsp;&bull;&nbsp; P TO PAUSE</div>
     <div class="credit">FREE PLAY</div>
+    <div class="attrib">JET MODEL: MITSUBISHI F-2 BY BOHMERANG, CC BY 4.0, VIA SKETCHFAB</div>
   </div>
 
   <div id="pause" class="screen hidden">
@@ -55,7 +57,8 @@
   </div>
 
   <div id="result" class="screen hidden">
-    <h2 id="rTitle">MISSION COMPLETE</h2>
+    <h2 id="rTitle">YOU WIN!</h2>
+    <div id="rSub" class="rsub"></div>
     <div class="rank" id="rRank">A</div>
     <div class="stats">
       <div><span>SCORE</span><b id="rScore">0</b></div>

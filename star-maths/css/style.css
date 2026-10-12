@@ -179,3 +179,10 @@ button { font-family: inherit; color: inherit; }
 #tools button.muted .w { display: none; }
 #boot { background: #02030b; font-size: 1.6cqw; color: var(--cy); z-index: 9; }
 #boot span { animation: blink 0.8s steps(2) infinite; }
+
+.sp { margin-top: 0.7cqw; color: var(--yl) !important; text-shadow: none !important; }
+.warn { position: absolute; left: 50%; top: 13.2cqw; transform: translateX(-50%); padding: 0.7cqw 1.8cqw; font-size: 1.2cqw; color: #fff; background: rgba(190, 20, 20, 0.82); border: 0.16cqw solid #ff9a9a; border-radius: 0.5cqw; opacity: 0; white-space: nowrap; box-shadow: 0 0 2cqw rgba(255, 60, 60, 0.7); }
+.warn.on { animation: warnflash 2.2s steps(2) 1 forwards; }
+@keyframes warnflash { 0%, 40%, 80% { opacity: 1; } 20%, 60% { opacity: 0.25; } 100% { opacity: 0; } }
+.rsub { margin: -0.8cqw 0 1.4cqw; font-size: 1.1cqw; color: var(--yl); text-shadow: 0 0 1cqw rgba(255, 210, 63, 0.6); min-height: 1.2cqw; }
+.attrib { position: absolute; bottom: 0.5cqw; left: 0; right: 0; text-align: center; font-size: 0.5cqw; color: rgba(255, 255, 255, 0.45); }
