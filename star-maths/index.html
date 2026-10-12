@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Star Maths</title>
+<link rel="stylesheet" href="css/font.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="stage">
+  <canvas id="view"></canvas>
+
+  <!-- in game heads up display -->
+  <div id="hud" class="hidden">
+    <div class="box score"><span class="lbl">SCORE</span><span id="hScore" class="val">000000</span><span id="hStreak" class="streak"></span></div>
+    <div class="qpanel">
+      <span class="lbl" id="hQLabel">FLY THROUGH THE ANSWER</span>
+      <span id="hQ" class="q">&nbsp;</span>
+      <div class="qbar"><i id="hQBar"></i></div>
+    </div>
+    <div class="box gatecount"><span class="lbl" id="hSubj">ADDITION</span><span id="hGate" class="val sm">GATE 01/20</span></div>
+    <div id="fuel" class="fuel">
+      <span class="lbl">FUEL</span>
+      <div class="fbar"><i id="hFuelBar"></i><b id="hFuelNum">100</b></div>
+      <span id="hLow" class="low">LOW FUEL</span>
+    </div>
+    <div id="hMsg" class="msg"></div>
+    <div id="hComms" class="comms"><div class="face" id="hFace"></div><div class="ctext"><span id="hCallsign" class="callsign"></span><p id="hCommsText"></p></div></div>
+    <div id="hReady" class="ready"></div>
+  </div>
+  <div id="flash"></div>
+
+  <!-- arcade home screen -->
+  <div id="menu" class="screen hidden">
+    <div class="hi">HI-SCORE <span id="mHi">000000</span></div>
+    <h1 class="logo"><span>STAR</span> <span class="b">MATHS</span></h1>
+    <p class="tag">FLY THROUGH THE RIGHT ANSWER</p>
+    <div class="panel">
+      <div class="label">1 &nbsp;SELECT SUBJECT <small>&#9664; &#9654;</small></div>
+      <div id="subjects" class="cards"></div>
+      <div class="label">2 &nbsp;SELECT LEVEL <small>&#9650; &#9660;</small></div>
+      <div id="levels" class="pills"></div>
+      <div id="lvlinfo" class="info"></div>
+    </div>
+    <button id="start" class="start" type="button">&#9654; START MISSION</button>
+    <div class="foot">ARROWS OR MOUSE TO FLY &nbsp;&bull;&nbsp; SPACE OR CLICK TO BARREL ROLL &nbsp;&bull;&nbsp; P TO PAUSE</div>
+    <div class="credit">FREE PLAY</div>
+  </div>
+
+  <div id="pause" class="screen hidden">
+    <h2>PAUSED</h2>
+    <button id="bResume" class="start" type="button">&#9654; RESUME</button>
+    <button id="bQuit" class="alt" type="button">QUIT TO MENU</button>
+  </div>
+
+  <div id="result" class="screen hidden">
+    <h2 id="rTitle">MISSION COMPLETE</h2>
+    <div class="rank" id="rRank">A</div>
+    <div class="stats">
+      <div><span>SCORE</span><b id="rScore">0</b></div>
+      <div><span>ACCURACY</span><b id="rAcc">0%</b></div>
+      <div><span>BEST STREAK</span><b id="rStreak">0</b></div>
+      <div><span>FUEL LEFT</span><b id="rFuel">0</b></div>
+    </div>
+    <div id="rNew" class="newhi hidden">NEW HI-SCORE!</div>
+    <div id="rMissed" class="missed"></div>
+    <div class="btns">
+      <button id="bRetry" class="start" type="button">&#9654; FLY AGAIN</button>
+      <button id="bMenu" class="alt" type="button">MENU</button>
+    </div>
+  </div>
+
+  <div id="tools">
+    <button id="bMute" type="button" title="Sound on or off (M)" aria-label="Sound">
+      <svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 4V5L7 9H3z"/><path class="w" d="M15 8.5a5 5 0 0 1 0 7M17.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
+    <button id="bPause" type="button" title="Pause (P)" aria-label="Pause">
+      <svg viewBox="0 0 24 24"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
+    </button>
+    <button id="bFull" type="button" title="Full screen (F)" aria-label="Full screen">
+      <svg viewBox="0 0 24 24"><path d="M4 4h6v2H6v4H4zM14 4h6v6h-2V6h-4zM4 14h2v4h4v2H4zM18 14h2v6h-6v-2h4z"/></svg>
+    </button>
+  </div>
+
+  <div id="boot" class="screen"><span>LOADING</span></div>
+  <div id="fail" class="screen hidden">
+    <h2>NO 3D GRAPHICS</h2>
+    <p>Star Maths needs WebGL 2. Try a current version of Chrome, Edge, Firefox or Safari with hardware acceleration switched on.</p>
+  </div>
+</div>
+
+<script src="lib/playcanvas.min.js"></script>
+<script src="js/questions.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/scene.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>
