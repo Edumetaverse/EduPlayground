@@ -1,6 +1,6 @@
 # Star Maths
 
-A maths game in the style of Star Fox. Answer gates fly towards your jet. Fly through the right one. Wrong answers cost fuel, right answers give a little back. Answer all 20 questions, then dock with the mothership to win.
+A maths game in the style of Star Fox. Answer gates fly towards your spaceship. Fly through the right one. Wrong answers cost fuel, right answers give a little back. Answer all 20 questions, then dock with the mothership to win.
 
 ## Playing
 
@@ -17,7 +17,7 @@ cd star-maths
 python3 -m http.server 8000
 ```
 
-Then visit http://localhost:8000. Use a web server rather than double clicking `index.html`. Browsers will not load the jet model from a file on disk, so the game would fall back to its plainer built in craft.
+Then visit http://localhost:8000. A web server is the most reliable way to run it.
 
 It needs a browser with WebGL 2 (current Chrome, Edge, Firefox or Safari).
 
@@ -26,12 +26,14 @@ It needs a browser with WebGL 2 (current Chrome, Edge, Firefox or Safari).
 | Action | Keyboard | Mouse or touch |
 | --- | --- | --- |
 | Fly | Arrow keys or WASD | Move the mouse (or drag) |
-| Barrel roll | Space | Click or tap |
+| Fire a missile | Space | Left click or tap |
+| Roll left | Z | Right click on the left half of the screen |
+| Roll right | C | Right click on the right half of the screen |
 | Pause | P or Esc | Pause button |
 | Sound | M | Speaker button |
 | Full screen | F | Full screen button |
 
-Rolling through the right gate earns bonus points.
+Fire a missile and it homes in on whatever is closest to your line of fire. Aim at an answer gate and the missile answers for you. A right answer by missile is worth 60% of the points of flying through it, and a wrong one costs just the same fuel. If a meteor is coming at you, the missile goes for that first and blasts it for 25 points. Rolling also slides you sideways, which is handy for dodging.
 
 On the home screen use left and right to pick a subject, up and down to pick a level, and Enter to start.
 
@@ -41,26 +43,26 @@ Addition, subtraction, multiplication, division, mixed operations (including ord
 
 ### Levels
 
-| Level | Starting speed | Wrong answer | Right answer |
-| --- | --- | --- | --- |
-| 1 Cadet | slowest | lose 15 fuel | gain 6 |
-| 2 Pilot | | lose 18 | gain 5 |
-| 3 Ace | | lose 22 | gain 5 |
-| 4 Captain | | lose 25 | gain 4 |
-| 5 Legend | fastest | lose 28 | gain 4 |
+| Level | Starting speed | Right answer |
+| --- | --- | --- |
+| 1 Cadet | slowest | gain 6 fuel |
+| 2 Pilot | | gain 5 |
+| 3 Ace | | gain 5 |
+| 4 Captain | | gain 4 |
+| 5 Legend | fastest | gain 4 |
 
-Numbers get bigger and the questions trickier as the level goes up. Your jet gets about 3% faster after every question, so the last gates come much quicker than the first.
+Numbers get bigger and the questions trickier as the level goes up. Every wrong or missed answer drains a third of the tank at any level. Every right answer speeds the ship up by 6% of its starting speed, up to nearly double, so the last gates come much quicker than the first.
 
 ### A mission
 
 1. Answer 20 questions. Each question is three gates. Fly through the right one. Flying through none of them counts as a wrong answer.
-2. Watch out for hazards. From the fourth question on, a meteorite may streak across your path, or on ground stages a tower may topple across the lanes. Steer around them. A hit costs some fuel but does not count as a wrong answer.
+2. Watch out for hazards. From the fourth question on, a meteorite may streak across your path, or on ground stages a tower may topple across the lanes. Steer around them. A hit costs 15 fuel but does not count as a wrong answer.
 3. Run out of fuel and the mission ends.
 4. Answer all 20 and the docking sequence begins. Your wingmen escort you to the mothership, the bay doors open and you fly in. Dock safely to win and collect a 500 point bonus.
 
 ### Wingmen
 
-Three wingmen (Spark, Nova and Orbit) fly in beside you to give advice, then boost away. After a wrong answer they talk you through a way to work it out. They also cheer on streaks and warn you when fuel is low.
+Three wingmen (Spark, Nova and Orbit, each with their own spaceship) fly in beside you to give advice, then boost away. After a wrong answer they talk you through a way to work it out. They also cheer on streaks and warn you when fuel is low.
 
 ## Graphics quality
 
@@ -80,7 +82,6 @@ The game starts at full quality and steps down by itself if the frame rate drops
 | `js/audio.js` | Synthesised sound effects and music (WebAudio, no files). |
 | `css/` | Styles, plus the embedded pixel font. |
 | `lib/playcanvas.min.js` | The PlayCanvas engine, built from https://github.com/Edumetaverse/playcanvasengine |
-| `assets/` | The jet model and the decoders it needs |
 
 ## Rebuilding the engine
 
@@ -94,6 +95,5 @@ cp build/playcanvas.min.js ../EduPlayground/star-maths/lib/
 
 ## Credits
 
-* Jet fighter model: "Mitsubishi F-2 - Fighter Jet - Free" by bohmerang on Sketchfab, licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Source: https://sketchfab.com/3d-models/mitsubishi-f-2-fighter-jet-free-d3d7244554974f499b106e6c11fe3aaf. The model comes from the PlayCanvas engine's example assets and is used here unchanged apart from tinting the paint colour for the wingmen.
-* PlayCanvas engine, MIT licence, Copyright PlayCanvas Ltd. The Draco and Basis decoders in `assets/wasm` are from the same repository.
+* PlayCanvas engine, MIT licence, Copyright PlayCanvas Ltd.
 * Press Start 2P font by CodeMan38, SIL Open Font License 1.1.

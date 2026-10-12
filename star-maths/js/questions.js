@@ -145,11 +145,11 @@
     ];
 
     const LEVELS = [
-        { name: 'CADET', speed: 19, penalty: 15, gain: 6 },
-        { name: 'PILOT', speed: 24, penalty: 18, gain: 5 },
-        { name: 'ACE', speed: 29, penalty: 22, gain: 5 },
-        { name: 'CAPTAIN', speed: 35, penalty: 25, gain: 4 },
-        { name: 'LEGEND', speed: 42, penalty: 28, gain: 4 }
+        { name: 'CADET', speed: 19, gain: 6 },
+        { name: 'PILOT', speed: 24, gain: 5 },
+        { name: 'ACE', speed: 29, gain: 5 },
+        { name: 'CAPTAIN', speed: 35, gain: 4 },
+        { name: 'LEGEND', speed: 42, gain: 4 }
     ];
 
     /* Returns three distinct, non negative answers (one correct) in random order. */

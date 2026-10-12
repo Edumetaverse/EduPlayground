@@ -6,6 +6,12 @@
     const Q = root.SM.Q, C = root.SM.C, Snd = root.SM.Audio, Scene = root.SM.Scene, THEMES = root.SM.THEMES;
     const $ = (id) => document.getElementById(id);
     const MISSION = 20;
+    const FUEL_LOSS = 100 / 3;      // a wrong or missed answer drains a third of the tank
+    const HAZARD_LOSS = 15;
+    const FUEL_DEAD = 0.5;
+    const SPEED_PER_RIGHT = 0.06;   // each right answer speeds the ship up by 6% of its starting speed
+    const SPEED_CAP = 1.9;
+    const MISSILE_CD = 0.8;
     const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
     const store = {
@@ -60,7 +66,7 @@
         const L = Q.LEVELS[G.level];
         const sample = Q.SUBJECTS[G.subj].gen(G.level).text.replace('= ?', '= ?');
         const secs = ((C.SPAWN_D) / L.speed).toFixed(1);
-        $('lvlinfo').innerHTML = `EXAMPLE: <b>${sample}</b><br>${secs} SECONDS PER GATE &nbsp;&bull;&nbsp; WRONG LOSES <b>${L.penalty}</b> FUEL &nbsp;&bull;&nbsp; RIGHT GAINS <b>${L.gain}</b>`;
+        $('lvlinfo').innerHTML = `EXAMPLE: <b>${sample}</b><br>${secs} SECONDS PER GATE &nbsp;&bull;&nbsp; WRONG LOSES <b>1/3</b> OF YOUR FUEL &nbsp;&bull;&nbsp; RIGHT GAINS <b>${L.gain}</b> AND SPEEDS YOU UP`;
         $('mHi').textContent = pad6(parseInt(store.get(hiKey(), '0'), 10) || 0);
         store.set('subj', G.subj); store.set('level', G.level);
         if (Scene.ready) Scene.setTheme(Q.SUBJECTS[G.subj].theme);
@@ -72,7 +78,7 @@
         G.state = 'menu';
         ['hud', 'pause', 'result'].forEach((id) => $(id).classList.add('hidden'));
         $('menu').classList.remove('hidden');
-        G.ship.alive = true; G.gates = []; G.hazards = []; G.dock = null; G.pending = null;
+        G.ship.alive = true; G.gates = []; G.hazards = []; G.missiles = []; G.dock = null; G.pending = null;
         hideComms(); Scene.resetWingmen();
         refreshMenu();
         Snd.startMusic('menu', Q.SUBJECTS[G.subj].theme);
@@ -84,7 +90,7 @@
         if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
         Object.assign(G, {
             warnedLow: false, fuel: 100, score: 0, streak: 0, best: 0, qIdx: 0, correct: 0, wrong: 0, missed: [], lastText: '', q: null,
-            briefed: G.briefed, gates: [], hazards: [], dock: null, invuln: 0, phase: 'idle', phaseT: 0, shake: 0, endT: 0, endKind: '', rollT: 0, rollCd: 0, lowT: 0, outcome: null,
+            briefed: G.briefed, gates: [], hazards: [], missiles: [], missileCd: 0, dodge: 0, rollDir: 1, fadeGates: false, dock: null, invuln: 0, phase: 'idle', phaseT: 0, shake: 0, endT: 0, endKind: '', rollT: 0, rollCd: 0, lowT: 0, outcome: null,
             state: 'ready', readyT: 4.1
         });
         G.ship.x = 0; G.ship.y = 0; G.ship.vx = 0; G.ship.vy = 0; G.ship.roll = 0; G.ship.alive = true;
@@ -115,6 +121,7 @@
             d: C.SPAWN_D, val: v, ok: v === q.ans, state: 'idle', t: 0
         }));
         G.qIdx++;
+        G.fadeGates = false;
         G.phase = 'approach'; G.phaseT = 0;
         maybeSpawnHazard();
         $('hQ').textContent = q.text;
@@ -170,48 +177,56 @@
         f.className = kind;
     }
 
-    function resolveGates() {
-        if (G.state !== 'play') return;
+    /* Called when the ship crosses the gates, or with a gate when a missile hits it. */
+    function resolveGates(shotGate) {
+        if (G.state !== 'play' || G.phase !== 'approach') return;
         const L = Q.LEVELS[G.level];
         const s = G.ship;
-        let hit = null, hitD = 1e9;
-        for (const g of G.gates) {
-            const d = Math.hypot(s.x - g.x, s.y - g.y);
-            if (d <= C.GATE_R + 0.45 && d < hitD) { hit = g; hitD = d; }
+        const shot = !!shotGate;
+        let hit = shotGate || null, hitD = 1e9;
+        if (!shot) {
+            for (const g of G.gates) {
+                const d = Math.hypot(s.x - g.x, s.y - g.y);
+                if (d <= C.GATE_R + 0.45 && d < hitD) { hit = g; hitD = d; }
+            }
         }
         const right = G.gates.find((g) => g.ok);
         G.phase = 'resolve'; G.phaseT = 0;
-        const px = s.x, py = s.y;
+        const px = shot ? hit.x : s.x, py = shot ? hit.y : s.y, pz = shot ? -hit.d : 0;
 
         if (hit && hit.ok) {
-            const rolled = G.rollT > 0;
-            const pts = Math.round((100 + Math.min(G.streak, 10) * 20) * (1 + G.level * 0.25)) + (rolled ? 50 : 0);
+            const rolled = !shot && G.rollT > 0;
+            let pts = Math.round((100 + Math.min(G.streak, 10) * 20) * (1 + G.level * 0.25));
+            pts = shot ? Math.round(pts * 0.6) : pts + (rolled ? 50 : 0);
             G.score += pts; G.streak++; G.best = Math.max(G.best, G.streak); G.correct++;
             G.fuel = Math.min(100, G.fuel + L.gain);
             G.gates.forEach((g) => { g.state = g === hit ? 'ok' : 'dim'; });
-            Scene.burst('good', px, py, 0);
+            Scene.burst('good', px, py, pz);
             Snd.good(G.streak);
             flash('good');
-            banner('CORRECT!', `+${pts} POINTS &nbsp; +${L.gain} FUEL${rolled ? ' &nbsp; ROLL BONUS' : ''}`, 'good');
+            banner('CORRECT!', `+${pts} POINTS &nbsp; +${L.gain} FUEL${rolled ? ' &nbsp; ROLL BONUS' : ''}${shot ? ' &nbsp; MISSILE' : ''} &nbsp; SPEED UP`, 'good');
             if (G.streak === 5 || G.streak === 10 || G.streak === 15) advise(`${G.streak} in a row! You are flying like an ace. Keep it up!`);
             else if (Math.random() < 0.14) advise(Q.TIPS[(Math.random() * Q.TIPS.length) | 0]);
         } else {
             const missedAll = !hit;
-            G.fuel = Math.max(0, G.fuel - L.penalty);
+            G.fuel = Math.max(0, G.fuel - FUEL_LOSS);
             G.streak = 0; G.wrong++;
             G.missed.push(G.q.eq);
             G.gates.forEach((g) => { g.state = g === hit ? 'bad' : g.ok ? 'reveal' : 'dim'; });
-            Scene.burst('bad', px, py, 0);
+            Scene.burst('bad', px, py, pz);
             G.shake = 1;
             missedAll ? Snd.miss() : Snd.bad();
             flash('bad');
-            banner(missedAll ? 'MISSED THE GATES!' : 'WRONG ANSWER!', `${G.q.eq} &nbsp; -${L.penalty} FUEL`, 'bad');
+            banner(missedAll ? 'MISSED THE GATES!' : 'WRONG ANSWER!', `${G.q.eq} &nbsp; -${Math.round(FUEL_LOSS)} FUEL`, 'bad');
             advise((missedAll ? 'You flew past all three gates! ' : 'Not that one! ') + G.q.eq + '. ' + Q.hintFor(G.q), true);
             if (right) right.t = 0;
         }
+        // a missile answer happens far from the ship, so the gates fade out instead of sweeping past
+        if (shot) { G.fadeGates = true; G.gates.forEach((g) => { g.fade = 0; }); }
         updateHud(true);
 
-        if (G.fuel <= 0) {
+        if (G.fuel <= FUEL_DEAD) {
+            G.fuel = 0;
             G.outcome = 'dead';
             G.endT = 0.9;
         } else if (G.qIdx >= MISSION) {
@@ -285,6 +300,7 @@
         setText('hSpeed', G.state === 'dock' ? 'DOCKING' : 'SPEED ' + Math.round(G.speed / Q.LEVELS[G.level].speed * 100) + '%');
         const f = Math.round(G.fuel);
         setText('hFuelNum', String(f));
+        setText('hMis', G.missileCd > 0 ? 'MISSILE RELOADING' : 'MISSILE READY');
         $('hFuelBar').style.width = clamp(G.fuel, 0, 100) + '%';
         const fe = $('fuel');
         fe.classList.toggle('low', G.fuel <= 25);
@@ -313,13 +329,83 @@
             if ((s.x === C.XMAX && s.vx > 0) || (s.x === -C.XMAX && s.vx < 0)) s.vx = 0;
             if ((s.y === C.YMAX && s.vy > 0) || (s.y === C.YMIN && s.vy < 0)) s.vy = 0;
         }
+        // a barrel roll also slides the ship sideways, which is handy for dodging
+        s.x = clamp(s.x + G.dodge * dt, -C.XMAX, C.XMAX);
+        G.dodge *= Math.exp(-3.2 * dt);
+        if (Math.abs(G.dodge) > 0.1) s.vx += G.dodge * 0.5;
     }
 
-    function doRoll() {
+    // dir is -1 to roll left and 1 to roll right
+    function doRoll(dir) {
         if ((G.state !== 'play' && G.state !== 'ready') || G.rollT > 0 || G.rollCd > 0) return;
-        G.rollT = 0.7; G.rollCd = 1.0;
+        G.rollT = 0.7; G.rollCd = 1.0; G.rollDir = dir || 1;
+        G.dodge = (dir || 1) * 9;
         Snd.roll();
         Scene.burst('roll', G.ship.x, G.ship.y, 0);
+    }
+
+    /* ---------- missiles ---------- */
+    const MISSILE_SPEED = 130;
+    const meteorPos = (h) => ({ x: h.tx + (h.d / h.d0) * h.sx, y: h.ty + (h.d / h.d0) * h.sy });
+
+    // An incoming meteor near the ship is shot first (it is the thing about to hit you). Otherwise the missile
+    // goes for the answer gate nearest the ship's line of fire.
+    function pickTarget() {
+        const s = G.ship;
+        let threat = null;
+        for (const h of G.hazards) {
+            if (h.type !== 'meteor' || h.done || h.d < 4 || h.d > 110) continue;
+            const p = meteorPos(h);
+            if (Math.hypot(s.x - p.x, s.y - p.y) < 6.5 && (!threat || h.d < threat.d)) threat = h;
+        }
+        if (threat) return { type: 'meteor', hazard: threat };
+        let best = null, bd = 1e9;
+        if (G.phase === 'approach') {
+            for (const g of G.gates) {
+                const d = Math.hypot(s.x - g.x, s.y - g.y);
+                if (d < bd && d < C.GATE_R * 2.2) { best = { type: 'gate', gate: g }; bd = d; }
+            }
+        }
+        return best;
+    }
+
+    function fireMissile() {
+        if (G.state !== 'play' || G.missileCd > 0) return;
+        G.missileCd = MISSILE_CD;
+        const s = G.ship;
+        G.missiles.push({ x: s.x, y: s.y, dm: 2, t: 0, target: pickTarget() });
+        Snd.missile();
+    }
+
+    function updateMissiles(dt) {
+        if (G.missileCd > 0) G.missileCd = Math.max(0, G.missileCd - dt);
+        for (const m of G.missiles) {
+            m.t += dt;
+            m.dm += MISSILE_SPEED * dt;
+            const tg = m.target;
+            if (!tg) continue;
+            if (tg.type === 'gate') {
+                const g = tg.gate;
+                if (G.phase !== 'approach' || !G.gates.includes(g)) { m.target = null; continue; }
+                const k = Math.min(1, dt * 8);
+                m.x += (g.x - m.x) * k; m.y += (g.y - m.y) * k;
+                if (m.dm >= g.d - 0.6) { m.dead = true; resolveGates(g); }
+            } else {
+                const h = tg.hazard;
+                if (!G.hazards.includes(h)) { m.target = null; continue; }
+                const p = meteorPos(h), k = Math.min(1, dt * 8);
+                m.x += (p.x - m.x) * k; m.y += (p.y - m.y) * k;
+                if (m.dm >= h.d - 0.6 && Math.hypot(m.x - p.x, m.y - p.y) < h.r + 1.6) {
+                    m.dead = true;
+                    G.hazards = G.hazards.filter((q) => q !== h);
+                    G.score += 25;
+                    Scene.burst('boom', p.x, p.y, -h.d);
+                    Snd.explode();
+                    banner('METEOR DESTROYED', '+25 POINTS', 'good');
+                }
+            }
+        }
+        G.missiles = G.missiles.filter((m) => !m.dead && m.dm < 170 && m.t < 1.8);
     }
 
     /* ---------- hazards: meteorites and falling towers ---------- */
@@ -354,7 +440,7 @@
     function hazardTip() {
         if (G.hazardTold) return;
         G.hazardTold = true;
-        advise('Hazard ahead! Steer around it. A hit costs some fuel but it does not count as a wrong answer.', true);
+        advise('Hazard ahead! Dodge it with a roll, or shoot a meteor down with a missile. A hit costs some fuel but does not count as a wrong answer.', true);
     }
 
     function warn(text) {
@@ -399,7 +485,7 @@
 
     function hazardHit(h) {
         const L = Q.LEVELS[G.level];
-        const loss = Math.round(L.penalty * 0.6);
+        const loss = HAZARD_LOSS;
         G.fuel = Math.max(0, G.fuel - loss);
         G.streak = 0;
         G.invuln = 1.6; G.shake = 1.2;
@@ -407,7 +493,7 @@
         Snd.bad(); flash('bad');
         banner(h.type === 'meteor' ? 'METEOR HIT!' : 'TOWER HIT!', `-${loss} FUEL`, 'bad');
         updateHud(true);
-        if (G.fuel <= 0) { G.outcome = 'dead'; die(); }
+        if (G.fuel <= FUEL_DEAD) { G.fuel = 0; G.outcome = 'dead'; die(); }
     }
 
     function hazardView() {
@@ -477,7 +563,7 @@
 
         // forward speed
         let target = 22;
-        if (G.state === 'play') target = L.speed * (1 + 0.03 * Math.min(G.qIdx, MISSION));
+        if (G.state === 'play') target = L.speed * Math.min(SPEED_CAP, 1 + SPEED_PER_RIGHT * G.correct);
         else if (G.state === 'dock') target = G.dock.phase === 'approach' ? clamp((6 - G.dock.z) * 0.55, 3.2, 70) : 0;
         else if (G.state === 'dying') target = 6;
         else if (G.state === 'over') target = G.dock ? 0 : 10;
@@ -511,7 +597,7 @@
                 if (last.ready !== txt) {
                     last.ready = txt;
                     r.className = 'ready';
-                    r.innerHTML = txt + '<small>STEER WITH ARROWS, WASD OR THE MOUSE<br>SPACE OR CLICK TO BARREL ROLL</small>';
+                    r.innerHTML = txt + '<small>STEER WITH ARROWS, WASD OR THE MOUSE<br>SPACE FIRES A MISSILE &nbsp; Z AND C ROLL</small>';
                 }
             } else if (G.readyT > 0) {
                 if (last.ready !== 'GO') { last.ready = 'GO'; Snd.go(); r.className = 'ready go'; r.innerHTML = 'GO!'; }
@@ -519,14 +605,16 @@
                 last.ready = ''; r.innerHTML = ''; r.className = 'ready';
                 G.state = 'play';
                 spawnQuestion();
-                if (!G.briefed) { G.briefed = true; advise('Fly through the gate with the right answer. Press space or click for a barrel roll. Roll through the right gate for bonus points!', true); }
+                if (!G.briefed) { G.briefed = true; advise('Fly through the gate with the right answer, or press space to fire a missile at it. Z and C roll you left and right. A wrong answer costs a third of your fuel!', true); }
             }
         } else if (G.state === 'play' && !paused) {
             for (const g of G.gates) {
                 g.d -= G.speed * dt;
                 if (g.state !== 'idle') g.t = Math.min(1, g.t + dt / 0.9);
+                if (G.fadeGates) g.fade = Math.min(1, (g.fade || 0) + dt / 0.7);
             }
             updateHazards(dt);
+            updateMissiles(dt);
             if (G.phase === 'approach') {
                 const d = G.gates[0].d;
                 $('hQBar').style.width = clamp((1 - d / C.SPAWN_D) * 100, 0, 100) + '%';
@@ -557,8 +645,8 @@
         if (G.state === 'play' || G.state === 'ready' || G.state === 'dock') updateHud();
 
         Scene.frame({
-            ship: { x: s.x, y: s.y, vx: s.vx, vy: s.vy, roll: s.roll, alive: s.alive },
-            gates: G.gates, hazards: hazardView(), speed: G.speed, dist: G.dist, shake: G.shake * 0.5,
+            ship: { x: s.x, y: s.y, vx: s.vx, vy: s.vy, roll: s.roll, rollDir: G.rollDir, alive: s.alive },
+            gates: G.gates, hazards: hazardView(), missiles: G.missiles.map((m) => ({ x: m.x, y: m.y, z: -m.dm })), speed: G.speed, dist: G.dist, shake: G.shake * 0.5,
             dock: G.dock ? { active: true, z: G.dock.z, open: G.dock.open } : null, dockCam: G.dock ? G.dock.cam : 0
         }, sdt || 0);
     }
@@ -589,7 +677,9 @@
             case 'play':
                 if (e.code === 'ArrowLeft' || e.code === 'ArrowRight' || e.code === 'ArrowUp' || e.code === 'ArrowDown' ||
                     e.code === 'KeyW' || e.code === 'KeyA' || e.code === 'KeyS' || e.code === 'KeyD') G.input = 'key';
-                if (e.code === 'Space' || e.code === 'ShiftLeft' || e.code === 'KeyZ') doRoll();
+                if (e.code === 'Space') fireMissile();
+                if (e.code === 'KeyZ') doRoll(-1);
+                if (e.code === 'KeyC') doRoll(1);
                 if (e.code === 'Escape' || e.code === 'KeyP') pause();
                 break;
             case 'paused':
@@ -619,8 +709,13 @@
         const r = view.getBoundingClientRect();
         G.mx = (e.clientX - r.left) / r.width;
         G.my = (e.clientY - r.top) / r.height;
-        if (G.state === 'ready' || G.state === 'play') { if (e.pointerType === 'touch') G.input = 'mouse'; doRoll(); }
+        if (G.state === 'ready' || G.state === 'play') {
+            if (e.pointerType === 'touch') G.input = 'mouse';
+            if (e.button === 2) doRoll(G.mx < 0.5 ? -1 : 1); else fireMissile();
+        }
     });
+
+    stage.addEventListener('contextmenu', (e) => e.preventDefault());
 
     function toggleMute() {
         Snd.setMuted(!Snd.muted);

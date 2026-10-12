@@ -1017,159 +1017,285 @@
 
     /* ---------- spacecraft (player and wingmen share one builder) ---------- */
     const CRAFT = {
-        player: { tint: '#ffffff', paint: '#d6232a', trim: '#f0b72a', glass: '#1aa8ff', flame: '#ff9a3a', span: 17, sweep: 1.0, bw: 1.0, len: 1.0, fin: 7.2 },
-        spark: { name: 'SPARK', tint: '#4fffe0', paint: '#10c9b4', trim: '#f4f8ff', glass: '#8cff5e', flame: '#59f0ff', span: 15, sweep: 0.8, bw: 0.95, len: 1.05, fin: 8.4 },
-        nova: { name: 'NOVA', tint: '#a98bff', paint: '#7d4dff', trim: '#ffc94a', glass: '#ff7ad8', flame: '#ff6bd6', span: 13, sweep: 1.25, bw: 1.28, len: 0.92, fin: 6.2 },
-        orbit: { name: 'ORBIT', tint: '#ffa24a', paint: '#ff8a1f', trim: '#ffffff', glass: '#4ad0ff', flame: '#ffd25a', span: 19, sweep: 1.45, bw: 0.86, len: 1.2, fin: 7.8 }
+        player: { ship: true, body: '#f2f5fb', tint: '#ffffff', paint: '#d6232a', trim: '#f0b72a', glass: '#1aa8ff', flame: '#ff9a3a', span: 17, sweep: 1.0, bw: 1.0, len: 1.0, fin: 7.2 },
+        spark: { name: 'SPARK', ship: true, body: '#e4fbf7', tint: '#4fffe0', paint: '#10c9b4', trim: '#f4f8ff', glass: '#8cff5e', flame: '#59f0ff', span: 15, sweep: 0.8, bw: 0.95, len: 1.05, fin: 8.4 },
+        nova: { name: 'NOVA', ship: true, body: '#efe9ff', tint: '#a98bff', paint: '#7d4dff', trim: '#ffc94a', glass: '#ff7ad8', flame: '#ff6bd6', span: 13, sweep: 1.25, bw: 1.28, len: 0.92, fin: 6.2 },
+        orbit: { name: 'ORBIT', ship: true, body: '#fff2e2', tint: '#ffa24a', paint: '#ff8a1f', trim: '#ffffff', glass: '#4ad0ff', flame: '#ffd25a', span: 19, sweep: 1.45, bw: 0.86, len: 1.2, fin: 7.8 }
     };
 
-    function makeProcCraft(st) {
-        const mChrome = std({ diffuse: col('#eef2fa'), metalness: 1, gloss: 0.92 });
-        const mPaint = std({
-            diffuse: col(st.paint), metalness: 0.75, gloss: 0.92, cull: pc.CULLFACE_NONE, twoSidedLighting: true,
-            clearCoat: 1, clearCoatGloss: 0.98
+    /* ---------- the player's spaceship: lofted hull, swept wings, twin plasma engines ---------- */
+    const lerpv = (a, b, t) => a + (b - a) * t;
+
+    function catmull(p0, p1, p2, p3, t) {
+        const t2 = t * t, t3 = t2 * t;
+        return 0.5 * ((2 * p1) + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (-p0 + 3 * p1 - 3 * p2 + p3) * t3);
+    }
+
+    // finishes an indexed mesh: smooth normals, outward facing, optional uvs
+    function finishMesh(pos, idx, uv, centreFn) {
+        let n = pc.calculateNormals(pos, idx);
+        // check orientation on a handful of triangles; flip them all if the surface faces inwards
+        let score = 0;
+        for (let f = 0; f < idx.length; f += 3 * 7) {
+            const i = idx[f] * 3;
+            const c = centreFn ? centreFn(pos[i], pos[i + 1], pos[i + 2]) : [0, 0, 0];
+            score += n[i] * (pos[i] - c[0]) + n[i + 1] * (pos[i + 1] - c[1]) + n[i + 2] * (pos[i + 2] - c[2]);
+        }
+        if (score < 0) {
+            for (let f = 0; f < idx.length; f += 3) { const t = idx[f + 1]; idx[f + 1] = idx[f + 2]; idx[f + 2] = t; }
+            n = pc.calculateNormals(pos, idx);
+        }
+        const m = new pc.Mesh(S.device);
+        m.setPositions(pos); m.setNormals(n);
+        if (uv) m.setUvs(0, uv);
+        m.setIndices(idx); m.update();
+        return m;
+    }
+
+    /* A smooth body made by lofting rounded cross sections along z. sections: [{z, w, ht, hb, y}] */
+    function loftMesh(sections, o) {
+        o = o || {};
+        const segs = o.segs || 22, per = o.per || 7, pw = 2 / (o.sq || 2.6);
+        const rings = [];
+        const n = sections.length;
+        for (let s = 0; s < n - 1; s++) {
+            const a = sections[Math.max(0, s - 1)], b = sections[s], c = sections[s + 1], d = sections[Math.min(n - 1, s + 2)];
+            for (let k = 0; k < per; k++) {
+                const t = k / per;
+                rings.push({
+                    z: catmull(a.z, b.z, c.z, d.z, t), w: Math.max(0.001, catmull(a.w, b.w, c.w, d.w, t)),
+                    ht: Math.max(0.001, catmull(a.ht, b.ht, c.ht, d.ht, t)), hb: Math.max(0.001, catmull(a.hb, b.hb, c.hb, d.hb, t)),
+                    y: catmull(a.y || 0, b.y || 0, c.y || 0, d.y || 0, t)
+                });
+            }
+        }
+        const last = sections[n - 1];
+        rings.push({ z: last.z, w: Math.max(0.001, last.w), ht: Math.max(0.001, last.ht), hb: Math.max(0.001, last.hb), y: last.y || 0 });
+        const pos = [], uv = [], idx = [];
+        const nr = rings.length;
+        for (let i = 0; i < nr; i++) {
+            const r = rings[i];
+            for (let j = 0; j < segs; j++) {
+                const th = -Math.PI / 2 + j / segs * Math.PI * 2;
+                const cs = Math.cos(th), sn = Math.sin(th);
+                const x = r.w * Math.sign(cs) * Math.pow(Math.abs(cs), pw);
+                const y = (sn > 0 ? r.ht : r.hb) * Math.sign(sn) * Math.pow(Math.abs(sn), pw) + r.y;
+                pos.push(x, y, r.z);
+                uv.push(j / segs * 3, r.z / 8);
+            }
+        }
+        for (let i = 0; i < nr - 1; i++) {
+            for (let j = 0; j < segs; j++) {
+                const j2 = (j + 1) % segs;
+                const a = i * segs + j, b = i * segs + j2, c = (i + 1) * segs + j, d = (i + 1) * segs + j2;
+                idx.push(a, b, c, b, d, c);
+            }
+        }
+        if (o.capEnd) {
+            const base = pos.length / 3;
+            const r = rings[nr - 1];
+            pos.push(0, r.y, r.z); uv.push(0.5, r.z / 8);
+            for (let j = 0; j < segs; j++) idx.push(base, (nr - 1) * segs + j, (nr - 1) * segs + (j + 1) % segs);
+        }
+        return finishMesh(pos, idx, uv, (x, y, z) => {
+            let best = rings[0];
+            for (const r of rings) if (Math.abs(r.z - z) < Math.abs(best.z - z)) best = r;
+            return [0, best.y, best.z];
         });
-        const mTrim = std({ diffuse: col(st.trim), metalness: 1, gloss: 0.88, cull: pc.CULLFACE_NONE, twoSidedLighting: true });
-        const mDark = std({ diffuse: col('#2a3148'), metalness: 1, gloss: 0.8 });
-        const mGlass = std({ diffuse: col('#06121f'), metalness: 0.3, gloss: 1, emissive: col(st.glass), emissiveIntensity: 0.5 });
+    }
 
-        const bw = st.bw, ln = st.len;
-        const P = (x, y, z) => [x * bw, y, z < 0 ? z * ln : z];
-        const N = P(0, 0, -16), Tp = P(0, 3.2, -3), R = P(3, 0, -3), B = P(0, -2.2, -3), L = P(-3, 0, -3);
-        const tT = P(0, 1.6, 9), tR = P(1.6, 0, 9), tB = P(0, -1.2, 9), tL = P(-1.6, 0, 9);
-        const bodyTris = [
-            [N, Tp, R], [N, R, B], [N, B, L], [N, L, Tp],
-            ...quad(Tp, R, tR, tT), ...quad(R, B, tB, tR), ...quad(B, L, tL, tB), ...quad(L, Tp, tT, tL)
-        ];
-        const capTris = [[tT, tR, tB], [tT, tB, tL]];
-        const A = P(0, 5.2, -3.5), P1 = P(-1.6, 3.0, -0.5), P2 = P(1.6, 3.0, -0.5), P3 = P(0, 2.9, -9);
-        const glassTris = [[A, P1, P2], [A, P2, P3], [A, P3, P1]];
+    /* A wing with thickness. sg is +1 or -1 for the side. */
+    function wingShape(p) {
+        const pt = (u, v, side) => {
+            const x = lerpv(p.x0, p.x1, u);
+            const le = lerpv(p.leR, p.leT, u), te = lerpv(p.teR, p.teT, u);
+            const taper = lerpv(1, p.tipT, u);
+            const prof = Math.pow(Math.sin(Math.PI * Math.pow(v, 0.62)), 0.9);
+            const th = p.t * taper * prof;
+            const y = (p.y || 0) - (p.anhedral || 0) * (x - p.x0) + side * th;
+            return [x, y, lerpv(le, te, v)];
+        };
+        return pt;
+    }
 
-        const sp = st.span, sw = st.sweep;
-        const wing = (sg) => quad([sg * 3 * bw, 0, -5 * ln], [sg * (sp - 1), -1.2, 3 * sw], [sg * sp, -1.5, 9 + sw], [sg * 3 * bw, 0, 6]);
-        const stripe = (sg) => quad([sg * 3.2 * bw, 0.05, -4 * ln], [sg * (sp - 3), -1.1, 3.2 * sw], [sg * (sp - 2.7), -1.15, 5.5 * sw], [sg * 3.2 * bw, 0.05, 2]);
-        const tip = (sg) => [[[sg * (sp - 0.4), -1.4, 9 + sw], [sg * (sp - 1), -1.2, 3 * sw], [sg * (sp - 0.4), 4.4, 9 + sw]]];
-        const tail = [[P(0, 1.6, 9), P(0, 2.6, 0), P(0, st.fin, 9)]];
+    function wingMesh(p, sg) {
+        const nu = 14, nv = 12, pt = wingShape(p);
+        const pos = [], uv = [], idx = [];
+        for (const side of [1, -1]) {
+            for (let i = 0; i <= nu; i++) {
+                for (let j = 0; j <= nv; j++) {
+                    const q = pt(i / nu, j / nv, side);
+                    pos.push(q[0] * sg, q[1], q[2]);
+                    uv.push(i / nu * 2, j / nv * 2);
+                }
+            }
+        }
+        const W = (nv + 1), off = (nu + 1) * W;
+        for (let i = 0; i < nu; i++) {
+            for (let j = 0; j < nv; j++) {
+                const a = i * W + j, b = a + 1, c = a + W, d = c + 1;
+                idx.push(a, b, c, b, d, c);
+                idx.push(off + a, off + c, off + b, off + b, off + c, off + d);
+            }
+        }
+        // close the tip
+        for (let j = 0; j < nv; j++) {
+            const a = nu * W + j, b = a + 1;
+            idx.push(a, off + a, b, b, off + a, off + b);
+        }
+        const cx = (p.x0 + p.x1) / 2 * sg;
+        return finishMesh(pos, idx, uv, (x, y, z) => [x, p.y || 0, z]);
+    }
+
+    function ribbonMesh(points, width) {
+        const pos = [], idx = [];
+        points.forEach((q, i) => {
+            pos.push(q[0], q[1], q[2] - width / 2, q[0], q[1], q[2] + width / 2);
+            if (i < points.length - 1) { const b = i * 2; idx.push(b, b + 1, b + 2, b + 1, b + 3, b + 2); }
+        });
+        const n = pc.calculateNormals(pos, idx);
+        const m = new pc.Mesh(S.device);
+        m.setPositions(pos); m.setNormals(n);
+        // double sided: add the reversed triangles
+        const both = idx.slice();
+        for (let f = 0; f < idx.length; f += 3) both.push(idx[f], idx[f + 2], idx[f + 1]);
+        m.setIndices(both); m.update();
+        return m;
+    }
+
+    // a flat thin solid from a convex 2D outline; map(a, b) -> [x, y, z]
+    function plateMesh(poly, map, th, dir) {
+        const front = poly.map(([a, b]) => { const q = map(a, b); q[dir] += th / 2; return q; });
+        const back = poly.map(([a, b]) => { const q = map(a, b); q[dir] -= th / 2; return q; });
+        const tris = [];
+        for (let i = 1; i < poly.length - 1; i++) { tris.push([front[0], front[i], front[i + 1]]); tris.push([back[0], back[i + 1], back[i]]); }
+        for (let i = 0; i < poly.length; i++) {
+            const j = (i + 1) % poly.length;
+            tris.push([front[i], back[i], back[j]], [front[i], back[j], front[j]]);
+        }
+        const c = [0, 0, 0];
+        front.concat(back).forEach((q) => { c[0] += q[0] / (poly.length * 2); c[1] += q[1] / (poly.length * 2); c[2] += q[2] / (poly.length * 2); });
+        return facetMesh(tris, c);
+    }
+
+    function makeSpaceship(st) {
+        if (!S.tex.hull) {
+            const cv = newCanvas(256, 256), g = cv.getContext('2d');
+            g.fillStyle = '#fff'; g.fillRect(0, 0, 256, 256);
+            const r = rng(77);
+            for (let y = 0; y < 2; y++) {
+                for (let x = 0; x < 4; x++) {
+                    g.fillStyle = r() < 0.5 ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.05)';
+                    g.fillRect(x * 64, y * 128, 64, 128);
+                }
+            }
+            g.strokeStyle = 'rgba(20,28,48,0.42)'; g.lineWidth = 2;
+            g.beginPath();
+            for (let x = 0; x <= 256; x += 64) { g.moveTo(x, 0); g.lineTo(x, 256); }
+            for (let y = 0; y <= 256; y += 128) { g.moveTo(0, y); g.lineTo(256, y); }
+            g.stroke();
+            g.fillStyle = 'rgba(20,28,48,0.3)';
+            for (let i = 0; i < 90; i++) { g.beginPath(); g.arc(r() * 256, (r() < 0.5 ? 6 : 122) + (r() < 0.5 ? 0 : 128), 1.4, 0, 6.3); g.fill(); }
+            S.tex.hull = makeTex('hull', 256, 256, true, true, true);
+            S.tex.hull.setSource(cv);
+        }
+        const bw = st.bw || 1, sp = st.span || 17, sw = st.sweep || 1, finH = st.fin || 7.2;
+        const mBody = std({ diffuse: col(st.body || '#f2f5fb'), diffuseMap: S.tex.hull, metalness: 0.7, gloss: 0.9, clearCoat: 1, clearCoatGloss: 1 });
+        const mPaint = std({ diffuse: col(st.paint), diffuseMap: S.tex.hull, metalness: 0.75, gloss: 0.92, clearCoat: 1, clearCoatGloss: 1 });
+        const mDark = std({ diffuse: col('#262d40'), metalness: 1, gloss: 0.78 });
+        const mSteel = std({ diffuse: col('#8d97ae'), metalness: 1, gloss: 0.85, clearCoat: 0.6, clearCoatGloss: 1 });
+        const mGlass = std({ diffuse: col('#04101c'), metalness: 0.2, gloss: 1, emissive: col(st.glass), emissiveIntensity: 0.35, clearCoat: 1, clearCoatGloss: 1 });
+        const energy = glowMat(st.glass, 3.2);
+        const plasma = glowMat('#aeeaff', 5);
 
         const model = new pc.Entity('craftModel');
         const holder = new pc.Entity('holder');
-        holder.setLocalScale(0.1, 0.1, 0.1);
+        holder.setLocalScale(0.125, 0.125, 0.125);
         model.addChild(holder);
-        const add = (tris, mat, centre, shadow) => {
-            holder.addChild(entityWith(facetMesh(tris, centre), mat, { castShadows: shadow !== false, receiveShadows: false }));
+        const put = (mesh, mat, shadow, x, y, z) => {
+            const e = entityWith(mesh, mat, { castShadows: shadow !== false, receiveShadows: false });
+            e.setLocalPosition(x || 0, y || 0, z || 0);
+            holder.addChild(e);
+            return e;
         };
-        add(bodyTris, mChrome, [0, 0, -3 * ln]);
-        add(capTris, mDark, [0, 0, 9]);
-        add(glassTris, mGlass, [0, 3.6, -3.3]);
-        add(wing(-1).concat(wing(1)), mPaint, null);
-        add(stripe(-1).concat(stripe(1)), mChrome, null, false);
-        add(tip(-1).concat(tip(1)), mTrim, null);
-        add(tail, mTrim, null);
 
-        // engine pods, flames and navigation lights
-        const flameMat = glowMat(st.flame, 3.2, { blendType: pc.BLEND_ADDITIVE, opacity: 0.85, depthWrite: false });
-        const coreMat = glowMat('#e8f4ff', 4, { blendType: pc.BLEND_ADDITIVE, opacity: 0.95, depthWrite: false });
-        const flames = [];
-        for (const sx of [-1, 1]) {
-            const x = sx * 2.6 * bw;
-            const pod = prim('cylinder', mDark, { castShadows: false });
-            pod.setLocalScale(2.2, 6, 2.2); pod.setLocalEulerAngles(90, 0, 0); pod.setLocalPosition(x, -0.6, 6.5);
-            holder.addChild(pod);
-            const ring = prim('cylinder', glowMat(st.flame, 1.4), { castShadows: false });
-            ring.setLocalScale(2.35, 0.5, 2.35); ring.setLocalEulerAngles(90, 0, 0); ring.setLocalPosition(x, -0.6, 9.6);
-            holder.addChild(ring);
-            const fl = prim('cone', flameMat, { castShadows: false });
-            fl.setLocalEulerAngles(90, 0, 0); fl.setLocalPosition(x, -0.6, 12);
-            holder.addChild(fl);
-            const core = prim('cone', coreMat, { castShadows: false });
-            core.setLocalEulerAngles(90, 0, 0); core.setLocalPosition(x, -0.6, 10.2);
-            holder.addChild(core);
-            flames.push({ fl, core });
+        // fuselage, red nose cone and canopy
+        put(loftMesh([
+            { z: -18, w: 0.15 * bw, ht: 0.15, hb: 0.15 }, { z: -15, w: 0.9 * bw, ht: 0.8, hb: 0.55 }, { z: -10, w: 2.0 * bw, ht: 1.5, hb: 1.0 },
+            { z: -4, w: 2.9 * bw, ht: 2.0, hb: 1.4 }, { z: 3, w: 3.1 * bw, ht: 1.9, hb: 1.5 }, { z: 8, w: 2.6 * bw, ht: 1.6, hb: 1.3 }, { z: 11.5, w: 1.9 * bw, ht: 1.2, hb: 1.0 }
+        ], { capEnd: true }), mBody);
+        put(loftMesh([
+            { z: -18.2, w: 0.17 * bw, ht: 0.17, hb: 0.17 }, { z: -15, w: 0.96 * bw, ht: 0.86, hb: 0.6 }, { z: -12, w: 1.55 * bw, ht: 1.22, hb: 0.86 }
+        ]), mPaint);
+        put(loftMesh([
+            { z: -12.5, w: 0.05, ht: 0.05, hb: 0.05, y: 1.1 }, { z: -11, w: 0.9 * bw, ht: 0.9, hb: 0.25, y: 1.1 }, { z: -8, w: 1.4 * bw, ht: 1.5, hb: 0.25, y: 1.2 },
+            { z: -4.5, w: 1.35 * bw, ht: 1.25, hb: 0.25, y: 1.3 }, { z: -1.5, w: 0.8 * bw, ht: 0.65, hb: 0.2, y: 1.4 }, { z: 0.8, w: 0.05, ht: 0.05, hb: 0.05, y: 1.4 }
+        ], { sq: 2.2 }), mGlass);
+
+        // swept main wings and canards
+        const wing = { x0: 2.4, x1: sp - 0.4, leR: -6, teR: 10, leT: clamp(3.2 + (sw - 1) * 3.2, 0.5, 7), teT: 10.6, t: 0.75, tipT: 0.22, anhedral: 0.05, y: -0.1 };
+        const canard = { x0: 2.0, x1: 6.6, leR: -9.5, teR: -5.2, leT: -7.6, teT: -5.4, t: 0.28, tipT: 0.3, anhedral: 0, y: 0.1 };
+        for (const sg of [-1, 1]) {
+            put(wingMesh(wing, sg), mPaint);
+            put(wingMesh(canard, sg), mBody);
+            // glowing energy strip along the wing and a winglet at the tip
+            const pt = wingShape(wing);
+            const path = [];
+            for (let i = 1; i <= 9; i++) { const q = pt(0.12 + i / 9 * 0.74, 0.5, 1); path.push([q[0] * sg, q[1] + 0.06, q[2]]); }
+            put(ribbonMesh(path, 0.34), energy, false);
+            put(plateMesh([[5.2, -0.5], [10.6, -0.5], [10.6, 3.6], [8.6, 3.2]], (a, b) => [sg * (sp - 0.6), b, a], 0.3, 0), mPaint);
         }
-        const cf = prim('cone', flameMat, { castShadows: false });
-        cf.setLocalEulerAngles(90, 0, 0); cf.setLocalPosition(0, 0.1, 13);
-        holder.addChild(cf);
-        flames.push({ fl: cf, core: null, centre: true });
 
-        const navL = prim('sphere', glowMat('#ff2a2a', 5), { castShadows: false });
-        navL.setLocalScale(1.1, 1.1, 1.1); navL.setLocalPosition(-(sp - 0.4), -1.2, 9 + sw);
-        const navR = prim('sphere', glowMat('#2aff6a', 5), { castShadows: false });
-        navR.setLocalScale(1.1, 1.1, 1.1); navR.setLocalPosition(sp - 0.4, -1.2, 9 + sw);
-        const strobeMat = glowMat('#ffffff', 6);
-        const strobe = prim('sphere', strobeMat, { castShadows: false });
-        strobe.setLocalScale(1, 1, 1); strobe.setLocalPosition(0, st.fin + 0.4, 9);
-        holder.addChild(navL); holder.addChild(navR); holder.addChild(strobe);
+        // twin engine nacelles with glowing plasma exhausts
+        const flames = [];
+        const flameMat = glowMat(st.flame, 3.0, { blendType: pc.BLEND_ADDITIVE, opacity: 0.6, depthWrite: false });
+        const coreMat = glowMat('#cfeaff', 3.6, { blendType: pc.BLEND_ADDITIVE, opacity: 0.8, depthWrite: false });
+        const nacelle = loftMesh([
+            { z: -3, w: 0.7, ht: 0.7, hb: 0.7 }, { z: -1, w: 1.55, ht: 1.55, hb: 1.55 }, { z: 9, w: 1.6, ht: 1.6, hb: 1.6 },
+            { z: 12.4, w: 1.4, ht: 1.4, hb: 1.4 }, { z: 13.4, w: 1.8, ht: 1.8, hb: 1.8 }
+        ], { sq: 2.05 });
+        const ringMesh = pc.Mesh.fromGeometry(S.device, new pc.TorusGeometry({ tubeRadius: 0.17, ringRadius: 1.62, segments: 32, sides: 10 }));
+        const discMesh = pc.Mesh.fromGeometry(S.device, new pc.CircleGeometry({ radius: 1.45, segments: 28 }));
+        for (const sg of [-1, 1]) {
+            const x = sg * 5.5, y = -0.95;
+            put(nacelle, mSteel, true, x, y, 0);
+            const ring = put(ringMesh, energy, false, x, y, 13.3); ring.setLocalEulerAngles(90, 0, 0);
+            const disc = put(discMesh, plasma, false, x, y, 13.55); disc.setLocalEulerAngles(90, 0, 0);
+            // pylon from the hull to the nacelle
+            const a = [[sg * 2.7, -1.3, 2.5], [sg * 2.7, 0.6, 2.5], [sg * 2.7, 0.6, 9], [sg * 2.7, -1.3, 9]];
+            const b = [[sg * 4.4, -1.9, 3.5], [sg * 4.4, -0.1, 3.5], [sg * 4.4, -0.1, 10], [sg * 4.4, -1.9, 10]];
+            const quads = [[a[0], a[1], a[2], a[3]], [b[3], b[2], b[1], b[0]], [a[0], b[0], b[1], a[1]], [a[1], b[1], b[2], a[2]], [a[2], b[2], b[3], a[3]], [a[3], b[3], b[0], a[0]]];
+            const tris = [];
+            quads.forEach((q) => tris.push([q[0], q[1], q[2]], [q[0], q[2], q[3]]));
+            put(facetMesh(tris, [sg * 3.5, -0.6, 6.2]), mBody, false);
+            // flames
+            const fl = prim('cone', flameMat, { castShadows: false });
+            fl.setLocalEulerAngles(90, 0, 0);
+            const core = prim('cone', coreMat, { castShadows: false });
+            core.setLocalEulerAngles(90, 0, 0);
+            holder.addChild(fl); holder.addChild(core);
+            flames.push({ fl, core, x, y, z: 13.6, w: 2.4, len: 6.5 });
+        }
+        // central tail fin
+        put(plateMesh([[-1, 1.6], [3, 2.2], [9, finH + 0.4], [12, finH + 0.2], [11.6, 1.2]], (a, b) => [0, b, a], 0.42, 0), mPaint);
+
+        // navigation lights and a strobe
+        const navR = glowMat('#ff2a2a', 5), navG = glowMat('#2aff6a', 5), strobeMat = glowMat('#ffffff', 6);
+        const ball = (mat, x, y, z, s) => { const e = prim('sphere', mat, { castShadows: false }); e.setLocalScale(s, s, s); e.setLocalPosition(x, y, z); holder.addChild(e); };
+        ball(navR, -(sp - 0.5), 0.2, 10.4, 1.0); ball(navG, sp - 0.5, 0.2, 10.4, 1.0); ball(strobeMat, 0, finH + 0.8, 12, 0.9);
 
         const setFlame = (k) => {
             for (const f of flames) {
-                f.fl.setLocalScale(f.centre ? 1.1 : 1.5, (f.centre ? 5 : 7) * k, f.centre ? 1.1 : 1.5);
-                if (f.core) f.core.setLocalScale(0.8, 5.2 * k, 0.8);
+                const L = f.len * k;
+                f.fl.setLocalScale(f.w, L, f.w); f.fl.setLocalPosition(f.x, f.y, f.z + L / 2);
+                const Lc = L * 0.62;
+                f.core.setLocalScale(f.w * 0.5, Lc, f.w * 0.5); f.core.setLocalPosition(f.x, f.y, f.z + Lc / 2);
             }
-        };
-        return { model, flames, strobeMat, flameMat, setFlame };
-    }
-
-    /* The F-2 jet fighter model from the engine's example assets (CC BY 4.0, see README). It faces +X in the
-       file, so it is turned to fly down -Z. If the model could not be loaded the hand built craft is used. */
-    const JET = { centre: [2.55, 0.58, 0], tail: -4.45, scale: 0.33 };
-
-    function makeJetCraft(st) {
-        const model = new pc.Entity('craftModel');
-        const holder = new pc.Entity('holder');
-        holder.setLocalScale(JET.scale, JET.scale, JET.scale);
-        holder.setLocalEulerAngles(0, 90, 0);
-        model.addChild(holder);
-        const jet = S.jet.resource.instantiateRenderEntity({ castShadows: true, receiveShadows: false });
-        jet.setLocalPosition(-JET.centre[0], -JET.centre[1], -JET.centre[2]);
-        holder.addChild(jet);
-        jet.findComponents('render').forEach((r) => {
-            r.meshInstances.forEach((mi) => {
-                const m = mi.material.clone();
-                if (m.name === 'F-2-airframe') {
-                    m.diffuse = col(st.tint);
-                    m.clearCoat = 0.5; m.clearCoatGloss = 1;
-                } else if (m.name === 'Glass') {
-                    m.emissive = col(st.glass); m.emissiveIntensity = 0.12;
-                }
-                m.update();
-                mi.material = m;
-            });
-        });
-
-        // afterburner at the tail, built in the model's own coordinates
-        const flameMat = glowMat(st.flame, 3.4, { blendType: pc.BLEND_ADDITIVE, opacity: 0.85, depthWrite: false });
-        const coreMat = glowMat('#eaf6ff', 4.5, { blendType: pc.BLEND_ADDITIVE, opacity: 0.95, depthWrite: false });
-        const pivot = new pc.Entity('flame');
-        pivot.setLocalPosition(JET.tail + 0.15, 0.55, 0);
-        pivot.setLocalEulerAngles(0, 0, 90);
-        const fl = prim('cone', flameMat, { castShadows: false });
-        const core = prim('cone', coreMat, { castShadows: false });
-        pivot.addChild(fl); pivot.addChild(core);
-        jet.addChild(pivot);
-
-        const navMats = [glowMat('#ff2a2a', 5), glowMat('#2aff6a', 5)];
-        [[-1, 0], [1, 1]].forEach(([sg, i]) => {
-            const n = prim('sphere', navMats[i], { castShadows: false });
-            n.setLocalScale(0.3, 0.3, 0.3);
-            n.setLocalPosition(1.1, 0.35, sg * 4.85);
-            jet.addChild(n);
-        });
-        const strobeMat = glowMat('#ffffff', 6);
-        const strobe = prim('sphere', strobeMat, { castShadows: false });
-        strobe.setLocalScale(0.28, 0.28, 0.28);
-        strobe.setLocalPosition(-3.6, 2.7, 0);
-        jet.addChild(strobe);
-
-        const setFlame = (k) => {
-            const L = 3.6 * k;
-            fl.setLocalScale(1.25, L, 1.25); fl.setLocalPosition(0, L / 2, 0);
-            const Lc = 2.4 * k;
-            core.setLocalScale(0.42, Lc, 0.42); core.setLocalPosition(0, Lc / 2, 0);
         };
         return { model, flames: [], strobeMat, flameMat, setFlame };
     }
 
-    function makeCraft(st) { return S.jet ? makeJetCraft(st) : makeProcCraft(st); }
+    function makeCraft(st) { return makeSpaceship(st); }
 
     function buildShip() {
         const c = makeCraft(CRAFT.player);
@@ -1362,7 +1488,7 @@
         const t = S.time;
         for (let i = 0; i < 3; i++) {
             const g = S.gates[i], v = view.gates[i];
-            if (!v || !v.active || v.d < -5.2) { g.root.enabled = false; continue; }
+            if (!v || !v.active || v.d < -5.2 || (v.fade || 0) >= 1) { g.root.enabled = false; continue; }
             g.root.enabled = true;
             if (g.val !== v.val) { g.val = v.val; drawNumber(g, v.val, g.hex); }
             g.root.setPosition(v.x, v.y, -v.d);
@@ -1374,7 +1500,7 @@
             else if (v.state === 'dim') { k = 0.5; disc = 0.03; }
             // fade out as the gate sweeps past the camera so it never blocks the view
             const pass = v.d < 0 ? clamp(1 + v.d / 5, 0, 1) : 1;
-            const fade = (v.state === 'ok' ? 1 - v.t * v.t : 1) * pass;
+            const fade = (v.state === 'ok' ? 1 - v.t * v.t : 1) * pass * (1 - (v.fade || 0));
             g.root.setLocalScale(sc, sc, sc);
             g.ringMat.emissive = col(ringHex);
             g.ringMat.emissiveIntensity = k * 2.6;
@@ -1388,6 +1514,46 @@
             g.podMat.emissive = col(ringHex);
             g.ringMat.update(); g.ring2Mat.update(); g.discMat.update(); g.numMat.update(); g.podMat.update();
             g.pivot.setLocalEulerAngles(0, 0, t * 55 * (i % 2 ? -1 : 1));
+        }
+    }
+
+    /* ---------- missiles ---------- */
+    function buildMissiles() {
+        const chrome = std({ diffuse: col('#e9eef8'), metalness: 1, gloss: 0.9 });
+        const red = std({ diffuse: col('#d6232a'), metalness: 0.6, gloss: 0.85 });
+        const flameMat = glowMat('#ffb050', 3.4, { blendType: pc.BLEND_ADDITIVE, opacity: 0.85, depthWrite: false });
+        const trailMat = glowMat('#ffd9a0', 2.4, { blendType: pc.BLEND_ADDITIVE, opacity: 0.45, depthWrite: false });
+        S.missiles = [];
+        for (let i = 0; i < 4; i++) {
+            const root = new pc.Entity('missile' + i);
+            const body = prim('capsule', chrome, { castShadows: false });
+            body.setLocalScale(0.34, 0.5, 0.34); body.setLocalEulerAngles(90, 0, 0);
+            const nose = prim('cone', red, { castShadows: false });
+            nose.setLocalScale(0.34, 0.5, 0.34); nose.setLocalEulerAngles(-90, 0, 0); nose.setLocalPosition(0, 0, -0.78);
+            root.addChild(body); root.addChild(nose);
+            for (let k = 0; k < 4; k++) {
+                const fin = prim('box', red, { castShadows: false });
+                fin.setLocalScale(0.04, 0.5, 0.36);
+                fin.setLocalEulerAngles(0, 0, k * 90);
+                fin.setLocalPosition(0, 0, 0.55);
+                root.addChild(fin);
+            }
+            const fl = prim('cone', flameMat, { castShadows: false });
+            fl.setLocalEulerAngles(90, 0, 0); fl.setLocalScale(0.3, 1.8, 0.3); fl.setLocalPosition(0, 0, 1.55);
+            const trail = prim('box', trailMat, { castShadows: false });
+            trail.setLocalScale(0.1, 0.1, 6); trail.setLocalPosition(0, 0, 4.2);
+            root.addChild(fl); root.addChild(trail);
+            root.enabled = false;
+            S.app.root.addChild(root);
+            S.missiles.push(root);
+        }
+    }
+
+    function updateMissiles(view) {
+        const list = view.missiles || [];
+        for (let i = 0; i < S.missiles.length; i++) {
+            const m = list[i], e = S.missiles[i];
+            if (m) { e.enabled = true; e.setPosition(m.x, m.y, m.z); } else e.enabled = false;
         }
     }
 
@@ -1599,7 +1765,7 @@
         const opts = new pc.AppOptions();
         opts.graphicsDevice = device;
         opts.componentSystems = [pc.RenderComponentSystem, pc.CameraComponentSystem, pc.LightComponentSystem];
-        opts.resourceHandlers = [pc.TextureHandler, pc.ContainerHandler];
+        opts.resourceHandlers = [pc.TextureHandler];
         const app = new pc.AppBase(canvas);
         app.init(opts);
         S.app = app;
@@ -1616,22 +1782,6 @@
 
         if (document.fonts && document.fonts.load) {
             try { await document.fonts.load('40px "Press Start 2P"'); } catch (e) { /* font optional */ }
-        }
-
-        // the jet model (Draco meshes and Basis textures need their decoders); fall back to built in craft if it fails
-        pc.WasmModule.setConfig('DracoDecoderModule', { glueUrl: 'assets/wasm/draco/draco.wasm.js', wasmUrl: 'assets/wasm/draco/draco.wasm.wasm' });
-        pc.basisInitialize({ glueUrl: 'assets/wasm/basis/basis.wasm.js', wasmUrl: 'assets/wasm/basis/basis.wasm.wasm' });
-        try {
-            const asset = new pc.Asset('jet', 'container', { url: 'assets/models/jet-fighter.glb' });
-            await new Promise((resolve, reject) => {
-                asset.once('error', reject);
-                new pc.AssetListLoader([asset], app.assets).load((err) => (err ? reject(err) : resolve()));
-            });
-            if (!asset.resource) throw new Error('empty model');
-            S.jet = asset;
-        } catch (e) {
-            console.warn('Jet model unavailable, using the built in craft.', e);
-            S.jet = null;
         }
 
         // camera with a modern post pipeline
@@ -1680,6 +1830,7 @@
         buildGates();
         buildFx();
         buildHazards();
+        buildMissiles();
         buildHangar();
 
         S.key.light.castShadows = S.quality >= 2;
@@ -1696,6 +1847,7 @@
                 S.parts.forEach((p) => { p.e.enabled = true; p.e.setPosition(0, 0, -10); });
                 S.haz.meteors.forEach((m) => { m.root.enabled = true; m.root.setPosition(0, 0, -20); });
                 S.haz.tower.pivot.enabled = true; S.hangar.enabled = true;
+                S.missiles.forEach((m) => { m.enabled = true; m.setPosition(0, 0, -12); });
                 if (++n >= 4) {
                     app.off('update', warm);
                     S.wing.forEach((w) => { w.root.enabled = false; });
@@ -1703,6 +1855,7 @@
                     S.parts.forEach((p) => { p.e.enabled = false; });
                     S.haz.meteors.forEach((m) => { m.root.enabled = false; });
                     S.haz.tower.pivot.enabled = false; S.hangar.enabled = false;
+                    S.missiles.forEach((m) => { m.enabled = false; });
                     resolve();
                 }
             };
@@ -1732,7 +1885,7 @@
         S.cam.camera.fov = 58 + clamp(view.speed - 19, 0, 30) * 0.08 + (ship.roll > 0 ? Math.sin(ship.roll * Math.PI) * 4 : 0);
 
         // ship attitude
-        const roll = -clamp(ship.vx * 2.6, -48, 48) + ship.roll * 360;
+        const roll = -clamp(ship.vx * 2.6, -48, 48) + ship.roll * 360 * -(ship.rollDir || 1);
         const pitch = clamp(ship.vy * 2.4, -26, 26);
         const yaw = -clamp(ship.vx * 1.1, -22, 22);
         S.shipRoot.enabled = ship.alive !== false;
@@ -1762,6 +1915,7 @@
         updateParticles(dt, dz);
         updateGates(view);
         updateHazards(view);
+        updateMissiles(view);
         updateHangar(view.dock);
         updateWingmen(dt, ship);
         const strobe = (S.time % 1.4) < 0.08 ? 6 : 0.1;
@@ -1807,6 +1961,6 @@
         get ready() { return S.ready; },
         get themeName() { return S.T ? S.T.name : ''; },
         _state: S,
-        _dev: { terrainFns, genTile, THEMES, NX, NZ }
+        _dev: { terrainFns, genTile, THEMES, NX, NZ, makeCraft, CRAFT, buildTextures, applySky }
     };
 })(window);

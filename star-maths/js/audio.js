@@ -110,6 +110,7 @@
         roll() { noise(0.45, 0.35, 700, 3200); },
         flyIn() { noise(1.1, 0.4, 400, 3600); tone(180, 1.1, 'sawtooth', 0.12, 0, 520); },
         flyOut() { noise(1.3, 0.45, 3800, 240); tone(420, 1.2, 'sawtooth', 0.14, 0, 90); },
+        missile() { noise(0.5, 0.4, 3000, 500); tone(300, 0.35, 'sawtooth', 0.25, 0, 900); },
         warn() { [0, 0.22].forEach((d) => tone(980, 0.16, 'square', 0.3, d)); },
         dock() { [392, 523, 659, 784].forEach((f, i) => tone(f, 0.28, 'triangle', 0.4, i * 0.12)); noise(0.6, 0.15, 1200, 300); },
         comm() { tone(1320, 0.05, 'square', 0.2); tone(1760, 0.07, 'square', 0.2, 0.07); },

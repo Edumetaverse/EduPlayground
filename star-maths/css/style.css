@@ -185,4 +185,5 @@ button { font-family: inherit; color: inherit; }
 .warn.on { animation: warnflash 2.2s steps(2) 1 forwards; }
 @keyframes warnflash { 0%, 40%, 80% { opacity: 1; } 20%, 60% { opacity: 0.25; } 100% { opacity: 0; } }
 .rsub { margin: -0.8cqw 0 1.4cqw; font-size: 1.1cqw; color: var(--yl); text-shadow: 0 0 1cqw rgba(255, 210, 63, 0.6); min-height: 1.2cqw; }
-.attrib { position: absolute; bottom: 0.5cqw; left: 0; right: 0; text-align: center; font-size: 0.5cqw; color: rgba(255, 255, 255, 0.45); }
+
+.mis { display: block; margin-top: 0.6cqw; font-size: 0.72cqw; color: var(--gr); text-shadow: 0 0 0.6cqw rgba(89, 255, 154, 0.6); }
